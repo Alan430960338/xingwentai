@@ -1,7 +1,7 @@
 <template>
 	<view class="page-wrap">
-		<AppHeader title="我的" content="企业账户"  ></AppHeader>
-		
+		<AppHeader title="我的" content="企业账户"></AppHeader>
+
 
 
 		<!-- 用户信息卡片 -->
@@ -57,11 +57,11 @@
 
 		<!-- 功能菜单列表 -->
 		<view class="menu-card">
-			<view class="menu-item"@click="gotoCompanyInfo">
+			<view class="menu-item" @click="gotoCompanyInfo">
 				<view class="menu-icon blue">
 					<uni-icons type="list" size="30" color="#007aff" />
 				</view>
-				<view class="menu-text" >
+				<view class="menu-text">
 					<text class="menu-title">企业资料</text>
 					<text class="menu-desc">完善企业相关资料</text>
 				</view>
@@ -69,11 +69,11 @@
 			</view>
 			<view class="divider"></view>
 
-			<view class="menu-item"@click="gotoAddress">
+			<view class="menu-item" @click="gotoAddress">
 				<view class="menu-icon orange">
 					<uni-icons type="location" size="30" color="#ff9500" />
 				</view>
-				<view class="menu-text" >
+				<view class="menu-text">
 					<text class="menu-title">常用机房地址</text>
 					<text class="menu-desc">管理常用机房地址</text>
 				</view>
@@ -93,11 +93,11 @@
 			</view>
 			<view class="divider"></view>
 
-			<view class="menu-item"@click="gotoInvoiceManagemrnt">
+			<view class="menu-item" @click="gotoInvoiceManagemrnt">
 				<view class="menu-icon light-blue">
 					<uni-icons type="document" size="30" color="#5090ff" />
 				</view>
-				<view class="menu-text" >
+				<view class="menu-text">
 					<text class="menu-title">发票管理</text>
 					<text class="menu-desc">查看开票进度和历史发票</text>
 				</view>
@@ -117,11 +117,11 @@
 			</view>
 			<view class="divider"></view>
 
-			<view class="menu-item"@click="gotoServiceCenter">
+			<view class="menu-item" @click="gotoServiceCenter">
 				<view class="menu-icon pale-blue">
 					<uni-icons type="email" size="30" color="#82aaff" />
 				</view>
-				<view class="menu-text" >
+				<view class="menu-text">
 					<text class="menu-title">联系客服</text>
 					<text class="menu-desc">专属客服为您服务</text>
 				</view>
@@ -138,31 +138,50 @@
 	} from 'vue';
 	import bar from '@/components/tabBer/index.vue'
 	import AppHeader from '@/components/header.vue'
-	const gotoInvoiceManagemrnt = ()=>{
+
+
+	//本地缓存信息示例:
+	// {
+	// 	"type": "object",
+	// 	"data": {
+	// 		"id": 1,
+	// 		"group_id": 1,
+	// 		"username": "admin",
+	// 		"nickname": "admin",
+	// 		"mobile": "13000000000",
+	// 		"avatar": "/assets/img/avatar.png",
+	// 		"score": 0,
+	// 		"token": "f38a2739-620d-40e7-ba05-6b58df7dce83",
+	// 		"user_id": 1,
+	// 		"createtime": 1784510757,
+	// 		"expiretime": 1787102757,
+	// 		"expires_in": 2592000
+	// 	}
+	// }
+	const gotoInvoiceManagemrnt = () => {
 		uni.navigateTo({
-			url:'/pages/user/order/invoceManagement'
+			url: '/pages/user/order/invoceManagement'
 		})
 	}
-	
-	const gotoCompanyInfo = ()=>{
+
+	const gotoCompanyInfo = () => {
 		uni.navigateTo({
-			url:'/pages/user/company/comInfo'
+			url: '/pages/user/company/comInfo'
 		})
 	}
-	const gotoAddress = ()=>{
+	const gotoAddress = () => {
 		uni.navigateTo({
-			url:'/pages/user/address/address'
+			url: '/pages/user/address/address'
 		})
 	}
-	const gotoServiceCenter =()=>{
+	const gotoServiceCenter = () => {
 		uni.navigateTo({
-			url:'/pages/user/serviceCenter/serviceCenter'
+			url: '/pages/user/serviceCenter/serviceCenter'
 		})
 	}
 </script>
 
 <style scoped>
-
 	.page-wrap {
 		width: 750rpx;
 		min-height: 100vh;

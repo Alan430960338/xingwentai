@@ -78,8 +78,10 @@
 		try {
 			const res = await login({ id })
 			if (res.code === 1) {
-				const token = res.data.userinfo.token
+				const userinfo = res.data?.userinfo || {}
+				const token = userinfo.token
 				uni.setStorageSync('token', token)
+				uni.setStorageSync('userinfo', userinfo)
 				uni.showToast({
 					title: '登录成功',
 					icon: 'success',
