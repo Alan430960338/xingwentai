@@ -1,6 +1,6 @@
 <template>
 	<view class="page-wrap">
-		<AppHeader title="认证资料" content="工程师认证" ></AppHeader>
+		<AppHeader title="认证资料" content="工程师认证":back="true" ></AppHeader>
 		<!-- 顶部提示栏 -->
 		<view class="tip-box">
 			<text class="tip-text">建议上传身份证、技能证书和近照，审核通过后优先展示高价工单。</text>
@@ -43,6 +43,23 @@
 </template>
 
 <script setup>
+	
+	
+	// 清空默认数据
+	// 文本可输入，可上传图片，
+	
+	// 点击提交调用接口worker/master_auth,传递请求体参数:
+	// ame	string	是	师傅姓名
+	// mobile	string	是	联系电话
+	// job_ids	string	是	擅长工种ID，逗号分隔
+	// job_name	string	是	擅长工种名称，逗号分隔
+	// service_area	string	是	服务区域
+	// images	string	是	资质图片
+
+	
+	
+	
+	
 	import AppHeader from '@/components/header.vue'
 	import btnBtn from '@/components/button/btmBtn.vue'
 	// 模拟基础信息数据

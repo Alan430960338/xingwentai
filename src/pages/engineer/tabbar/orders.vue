@@ -93,7 +93,7 @@
 						<div class="item-btn" v-if="order.status === 4" @click.stop="viewProgress(order)">
 							查看原因
 						</div>
-						<div class="item-btn" v-if="order.status === 5" @click.stop="viewEvaluate(order)">
+						<div class="item-btn" v-if="order.status === 5 && order.is_pj===1" @click.stop="viewEvaluate(order)">
 							查看评价
 						</div>
 						<div class="item-btn" v-if="order.status === 2" @click.stop="cancelOrderWin(order)">
@@ -122,10 +122,10 @@ const searchKeyword = ref('')
 const currentTab = ref('all')
 const tabList = [
 	{ label: '全部', key: 'all', status: '' },
-	{ label: '待接单', key: 'pending', status: 1 },
+	// { label: '待接单', key: 'pending', status: 1 },
 	{ label: '待开始', key: 'ready', status: 2 },
 	{ label: '进行中', key: 'processing', status: 3 },
-	{ label: '已取消', key: 'cancelled', status: 4 },
+	// { label: '已取消', key: 'cancelled', status: 4 },
 	{ label: '已完成', key: 'done', status: 5 },
 	{ label: '已评价', key: 'evaluated', status: 5 }
 ]

@@ -19,6 +19,7 @@
 		<view class="card">
 			<text class="label">评价内容</text>
 			<text class="content-text">{{ detail.content || '--' }}</text>
+			<text class="reply-time">评价时间：{{ formatTime(detail.createtime) }}</text>
 		</view>
 
 		<view class="card">

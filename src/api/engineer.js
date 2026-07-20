@@ -73,3 +73,35 @@ export const getEvaluateDetail = (data) => {
 export const cancelOrder = (data) => {
   return request.post("demands/cancel_accept", data);
 };
+
+export const submitWithdraw = (data) => {
+  return request.post("worker/withdraw", data);
+};
+
+export const submitIdentityAuth = (data) => {
+  return request.post("worker/identity_auth", data);
+};
+
+export const getIdentityAuthDetail = (data) => {
+  return request.get("worker/identity_auth_detail", data);
+};
+
+export const getServiceCaseList = (data) => {
+  return request.get("saces/list", data);
+};
+
+export const addServiceCase = (data) => {
+  return request.post("saces/add", data);
+};
+
+export const getServiceCaseDetail = (data) => {
+  return request.get("saces/detail", data);
+};
+
+export const editServiceCase = (data) => {
+  return request.post("saces/edit", data);
+};
+
+export const deleteServiceCase = (data) => {
+  return request.post("saces/del", data);
+};

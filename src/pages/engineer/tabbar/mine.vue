@@ -1,20 +1,21 @@
 <template>
 	<view class="page-wrap">
-		<AppHeader title="我的" content="我的"></AppHeader>
+		<AppHeader title="我的" content="我的" ></AppHeader>
 
 		
 
 		<!-- 用户信息卡片 -->
 		<view class="user-card">
 			<view class="user-avatar">
-				<text class="avatar-text">文</text>
+				<image  class="avatar-image" :src="avatarUrl" mode="aspectFill" />
+				<!-- <text v-else class="avatar-text">{{ avatarText }}</text> -->
 			</view>
 			<view class="user-info">
 				<view class="name-row">
-					<text class="user-name">蔡徐坤</text>
+					<text class="user-name">{{ displayName }}</text>
 					<uni-icons type="checkmarkempty" size="20" color="#007aff" />
 				</view>
-				<text class="auth-tip">唱跳王子 · 认证通过</text>
+				<text class="auth-tip">{{ authTip }}</text>
 			</view>
 		</view>
 
@@ -30,7 +31,7 @@
 
 		<!-- 功能菜单列表 -->
 		<view class="menu-card">
-			<view class="menu-item">
+			<view class="menu-item" @click="gotoIdentityAuth">
 				<view class="menu-icon blue">
 					<uni-icons type="list" size="30" color="#007aff" />
 				</view>
@@ -38,7 +39,7 @@
 					<text class="menu-title">身份认证</text>
 					<text class="menu-desc">完善实名认证信息</text>
 				</view>
-				<text class="menu-right">已通过</text>
+				<text class="menu-right">{{ identityAuthStatusText }}</text>
 			</view>
 			<view class="divider"></view>
 
@@ -119,10 +120,81 @@
 
 <script setup>
 	import {
+		computed,
 		ref
 	} from 'vue';
+	import { baseUrl } from '@/api/config/config.js'
+	import { getUserInfo } from '@/api/user.js'
 	import bar from '@/components/tabBer/engineer.vue'
 	import AppHeader from '@/components/header.vue'
+	import { onShow } from '@dcloudio/uni-app'
+	import { getIdentityAuthDetail } from '@/api/engineer.js'
+
+	const profileInfo = ref({})
+	const identityAuthDetail = ref(null)
+
+	onShow(() => {
+		fetchUserInfo()
+		fetchIdentityAuthDetail()
+	})
+
+	const displayName = computed(() => profileInfo.value?.nickname || '未设置名称')
+	const authTip = computed(() => profileInfo.value?.mobile || '工程师账户')
+	const avatarText = computed(() => (displayName.value || '').slice(0, 1) || '我')
+	const hasIdentityAuth = computed(() => {
+		if (!identityAuthDetail.value) {
+			return false
+		}
+
+		return Object.keys(identityAuthDetail.value).length > 0
+	})
+	const identityAuthStatusText = computed(() => hasIdentityAuth.value ? '已通过' : '去完善')
+	const avatarUrl = computed(() => {
+		const avatar = profileInfo.value?.avatar
+		if (!avatar) {
+			return ''
+		}
+
+		if (/^https?:\/\//.test(avatar)) {
+			return avatar
+		}
+
+		const apiOrigin = baseUrl.replace(/\/api\/?$/, '')
+		return `${apiOrigin}${avatar}`
+	})
+
+	const fetchUserInfo = async () => {
+		try {
+			const res = await getUserInfo()
+			if (res.code !== 1) {
+				return
+			}
+
+			profileInfo.value = res.data || {}
+		} catch (error) {
+			profileInfo.value = {}
+		}
+	}
+
+	const fetchIdentityAuthDetail = async () => {
+		try {
+			const res = await getIdentityAuthDetail()
+			if (res.code !== 1) {
+				identityAuthDetail.value = null
+				return
+			}
+
+			const detail = res.data
+			if (!detail || (typeof detail === 'object' && Object.keys(detail).length === 0)) {
+				identityAuthDetail.value = null
+				return
+			}
+
+			identityAuthDetail.value = detail
+		} catch (error) {
+			identityAuthDetail.value = null
+		}
+	}
 	const gotoInvoiceManagemrnt = () => {
 		uni.navigateTo({
 			url: '/pages/user/order/invoceManagement'
@@ -130,7 +202,17 @@
 	}
 	const qualificationCertification = () => {
 		uni.navigateTo({
-			url: '/pages/engineer/certification/qualificationCertification'
+			url: '/pages/engineer/certification'
+		})
+	}
+
+	const gotoIdentityAuth = () => {
+		if (hasIdentityAuth.value) {
+			return
+		}
+
+		uni.navigateTo({
+			url: '/pages/engineer/certification/identityAuthForm'
 		})
 	}
 
@@ -293,6 +375,12 @@
 		align-items: center;
 		justify-content: center;
 		margin-right: 32rpx;
+		overflow: hidden;
+	}
+
+	.avatar-image {
+		width: 100%;
+		height: 100%;
 	}
 
 	.avatar-text {

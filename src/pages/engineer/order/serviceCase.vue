@@ -1,36 +1,100 @@
 <template>
 	<view class="page-wrap">
-		<AppHeader title="服务案例列表" content="服务案例列表" :back="true" :imageType=1 ></AppHeader>
+		<AppHeader title="服务案例列表" content="服务案例列表" :back="true" :imageType="1"></AppHeader>
 
-		<!-- 基础信息表单 -->
 		<view class="form-list">
-			<view class="form-item" v-for="(item, index) in baseInfo" :key="index">
+			<view v-if="caseList.length === 0 && !loading" class="empty-state">暂无服务案例</view>
+
+			<view class="form-item" v-for="(item, index) in caseList" :key="item.id || index">
 				<view class="item-content">
-					<text class="label">{{ item.label }}</text>
-					<text class="value">{{ item.value }}</text>
+					<text class="label">{{ item.title || '未命名案例' }}</text>
+					<text class="value">{{ formatTime(item.project_time) }}</text>
+					<text class="desc">{{ item.content || '--' }}</text>
 				</view>
-				<!-- 操作按钮区域 -->
 				<view class="item-actions">
-					<text class="action-btn edit-btn" @click="handleEdit(index)">编辑</text>
-					<text class="action-btn delete-btn" @click="handleDelete(index)">删除</text>
+					<text class="action-btn edit-btn" @click="handleEdit(item)">编辑</text>
+					<text class="action-btn delete-btn" @click="handleDelete(item, index)">删除</text>
 				</view>
 			</view>
+
+			<view v-if="loading" class="list-footer">加载中...</view>
+			<view v-else-if="caseList.length > 0" class="list-footer">{{ hasMore ? '上拉加载更多' : '没有更多了' }}</view>
 		</view>
 		
-		<mybtn text="新增案例" type="primary" style="position: absolute;bottom: 30rpx;left: 30rpx;right: 30rpx;" @click="addServiceCase"></mybtn>
+		<mybtn text="新增案例" type="primary" style="position: fixed;bottom: 30rpx;left: 30rpx;right: 30rpx;" @click="addServiceCase"></mybtn>
 	</view>
 </template>
 
 <script setup>
+import { ref } from 'vue'
+import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/header.vue'
 import mybtn from '@/components/button/btmBtn.vue'
+import { deleteServiceCase, getServiceCaseList } from '@/api/engineer.js'
 
-// 定义基础信息数组，包含提现相关的各项信息
-const baseInfo = [
-  { label: '文泰科技园监控升级', value: '2026-08-26' },
-  { label: '滨江数据中心弱电巡检', value: '2026-04-12' },
-  { label: '黄山办公楼侧门禁链条', value: '2026-06-12' },
-]
+const caseList = ref([])
+const page = ref(1)
+const limit = 10
+const hasMore = ref(true)
+const loading = ref(false)
+const deletingId = ref('')
+
+const padZero = value => String(value).padStart(2, '0')
+
+const formatTime = timestamp => {
+	if (!timestamp) {
+		return '--'
+	}
+
+	const normalizedTimestamp = String(timestamp).length === 13 ? Number(timestamp) : Number(timestamp) * 1000
+	const date = new Date(normalizedTimestamp)
+	if (Number.isNaN(date.getTime())) {
+		return '--'
+	}
+
+	return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())}`
+}
+
+const fetchServiceCaseList = async (reset = false) => {
+	if (loading.value) {
+		return
+	}
+
+	if (reset) {
+		page.value = 1
+		hasMore.value = true
+	}
+
+	if (!hasMore.value) {
+		return
+	}
+
+	loading.value = true
+
+	try {
+		const res = await getServiceCaseList({
+			page: page.value,
+			limit
+		})
+
+		if (res.code !== 1) {
+			uni.showToast({ title: res.msg || '案例获取失败', icon: 'none' })
+			return
+		}
+
+		const listData = Array.isArray(res.data?.data) ? res.data.data : []
+		caseList.value = reset ? listData : [...caseList.value, ...listData]
+		hasMore.value = page.value < Number(res.data?.last_page || 0)
+
+		if (hasMore.value) {
+			page.value += 1
+		}
+	} catch (error) {
+		uni.showToast({ title: '案例获取失败', icon: 'none' })
+	} finally {
+		loading.value = false
+	}
+}
 
 const addServiceCase = () => {
 	uni.navigateTo({
@@ -38,120 +102,152 @@ const addServiceCase = () => {
 	})
 }
 
-// 编辑功能
-const handleEdit = (index) => {
-	const item = baseInfo[index]
+const handleEdit = item => {
 	uni.navigateTo({
-		url: `/pages/engineer/order/addServiceCase?editIndex=${index}&label=${encodeURIComponent(item.label)}&value=${item.value}`
+		url: `/pages/engineer/order/addServiceCase?id=${item.id}`
 	})
 }
 
-// 删除功能
-const handleDelete = (index) => {
-	const item = baseInfo[index]
+const handleDelete = (item, index) => {
 	uni.showModal({
 		title: '删除确认',
-		content: `确定要删除「${item.label}」吗？`,
-		success: (res) => {
-			if (res.confirm) {
-				// 从数组中移除该项
-				baseInfo.splice(index, 1)
+		content: `确定要删除「${item.title || '未命名案例'}」吗？`,
+		success: async res => {
+			if (!res.confirm) {
+				return
+			}
+
+			if (deletingId.value) {
+				return
+			}
+
+			deletingId.value = item.id || ''
+
+			try {
+				const result = await deleteServiceCase({ id: item.id })
+				if (result.code !== 1) {
+					uni.showToast({ title: result.msg || '删除失败', icon: 'none' })
+					return
+				}
+
+				caseList.value.splice(index, 1)
 				uni.showToast({
 					title: '删除成功',
 					icon: 'success'
 				})
+
+				if (caseList.value.length === 0) {
+					fetchServiceCaseList(true)
+				}
+			} catch (error) {
+				uni.showToast({ title: '删除失败', icon: 'none' })
+			} finally {
+				deletingId.value = ''
 			}
 		}
 	})
 }
+
+onShow(() => {
+	fetchServiceCaseList(true)
+})
+
+onReachBottom(() => {
+	fetchServiceCaseList()
+})
 </script>
 
 <style scoped>
+.page-wrap {
+	margin: 0 auto;
+	background-color: #f0f7ff;
+	padding-bottom: 120rpx;
+	min-height: 100vh;
+	width: 750rpx;
+	box-sizing: border-box;
+}
 
-	.page-wrap {
-		margin: 0 auto;
-		background-color: #f0f7ff;
-		padding-bottom: 120rpx;
-		min-height: 100vh;
-		width: 750rpx;
-		box-sizing: border-box;
-	}
+.form-list {
+	margin: 0 30rpx;
+}
 
-	.form-list {
-		margin: 0 30rpx;
-	}
+.empty-state,
+.list-footer {
+	text-align: center;
+	font-size: 26rpx;
+	color: #98a2b3;
+	padding: 30rpx 0;
+}
 
-	.form-item {
-		background: #ffffff;
-		border-radius: 20rpx;
-		padding: 20rpx;
-		margin-bottom: 20rpx;
-		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.15);
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
+.form-item {
+	background: #ffffff;
+	border-radius: 20rpx;
+	padding: 20rpx;
+	margin-bottom: 20rpx;
+	box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.15);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
 
-	.item-content {
-		flex: 1;
-	}
+.item-content {
+	flex: 1;
+}
 
-	.label {
-		font-size: 28rpx;
-		color: #888;
-		display: block;
-		margin-bottom: 12rpx;
-	}
+.label {
+	font-size: 28rpx;
+	color: #1d2939;
+	font-weight: 600;
+	display: block;
+	margin-bottom: 12rpx;
+}
 
-	.value {
-		font-size: 30rpx;
-		color: #111;
-		font-weight: 500;
-	}
+.value {
+	font-size: 26rpx;
+	color: #667085;
+	display: block;
+	margin-bottom: 10rpx;
+}
 
-	/* 操作按钮样式 */
-	.item-actions {
-		display: flex;
-		flex-direction: column;
-		gap: 12rpx;
-		margin-left: 20rpx;
-	}
+.desc {
+	font-size: 26rpx;
+	color: #111;
+	line-height: 38rpx;
+	display: block;
+}
 
-	.action-btn {
-		font-size: 26rpx;
-		padding: 8rpx 24rpx;
-		border-radius: 12rpx;
-		text-align: center;
-		min-width: 80rpx;
-	}
+.item-actions {
+	display: flex;
+	flex-direction: column;
+	margin-left: 20rpx;
+}
 
-	.edit-btn {
-		color: #1765de;
-		background-color: #e8f0fe;
-		border: 1rpx solid #bddaff;
-	}
+.action-btn {
+	font-size: 26rpx;
+	padding: 8rpx 24rpx;
+	border-radius: 12rpx;
+	text-align: center;
+	min-width: 80rpx;
+	margin-bottom: 12rpx;
+}
 
-	.delete-btn {
-		color: #ff4d4f;
-		background-color: #fff1f0;
-		border: 1rpx solid #ffccc7;
-	}
+.action-btn:last-child {
+	margin-bottom: 0;
+}
 
-	/* 点击反馈 */
-	.action-btn:active {
-		opacity: 0.6;
-	}
+.edit-btn {
+	color: #1765de;
+	background-color: #e8f0fe;
+	border: 1rpx solid #bddaff;
+}
 
-	.bottom-btn {
-		position: absolute;
-		left: 30rpx;
-		right: 30rpx;
-		margin-top: 20rpx;
-		background: linear-gradient(to right,#1d73ea,#145dd7);
-		color: #fff;
-		padding: 20rpx;
-		text-align: center;
-		border-radius: 20rpx;
-		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.15);
-	}
+.delete-btn {
+	color: #ff4d4f;
+	background-color: #fff1f0;
+	border: 1rpx solid #ffccc7;
+}
+
+.action-btn:active {
+	opacity: 0.6;
+}
 </style>

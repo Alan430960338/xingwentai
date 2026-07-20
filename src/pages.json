@@ -258,6 +258,13 @@
 		}
 	},
 	{
+		"path": "pages/engineer/certification/identityAuthForm",
+		"style": {
+			"navigationBarTitleText": "身份认证",
+			"navigationStyle": "custom"
+		}
+	},
+	{
 		"path": "pages/engineer/serviceCenter/serviceCenter",
 		"style": {
 			"navigationBarTitleText": "客服中心",
