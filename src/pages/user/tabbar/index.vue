@@ -68,62 +68,228 @@
 			</view>
 		</view>
 
-		<!-- 工单详情卡片 -->
-		<view class="order-card">
-			<view class="order-title-row">
-				<text class="order-title">机房精密空调告警维修</text>
-				<view class="order-tag">
-					<text class="tag-text">待派单</text>
+		<view class="order-section">
+			<view class="section-header">
+				<text class="section-title">订单列表</text>
+				<text class="section-count">共{{ total }}条</text>
+			</view>
+
+			<view v-if="orderList.length === 0 && !loading" class="empty-state">
+				<text class="empty-text">暂无订单</text>
+			</view>
+
+			<view
+				class="order-card"
+				v-for="order in orderList"
+				:key="order.id"
+				@click="gotoOrderDetail(order)"
+			>
+				<view class="order-title-row">
+					<text class="order-title">{{ order.title || '未命名工单' }}</text>
+					<view class="order-tag" :style="getStatusStyle(order.status).tagStyle">
+						<text class="tag-text" :style="getStatusStyle(order.status).textStyle">
+							{{ formatStatus(order.status) }}
+						</text>
+					</view>
+				</view>
+
+				<view class="order-title-row-tag">
+					<view class="tag1">SLA {{ formatHours(order.hours) }}</view>
+					<view class="tag2">{{ order.category_name || '暂无分类' }}</view>
+				</view>
+
+				<view class="order-info-row">
+					<text class="info-label">服务地址</text>
+					<text class="info-value info-value-right">{{ formatAddress(order) }}</text>
+				</view>
+
+				<view class="order-info-row">
+					<text class="info-label">计划开始</text>
+					<text class="info-value info-value-right">{{ order.planned_start_time }}</text>
+				</view>
+
+				<view class="order-info-row">
+					<text class="info-label">联系人</text>
+					<text class="info-value info-value-right">{{ formatContact(order.address_data) }}</text>
+				</view>
+
+				<view class="order-info-row no-border">
+					<text class="info-label">服务商</text>
+					<text class="info-value info-value-right">{{ order.service_name || '暂未分配' }}</text>
 				</view>
 			</view>
 
-			<view class="order-title-row-tag">
-				<div class="tag1">
-					SLA <span>4</span>小时
-				</div>
-
-				<div class="tag2">
-					机房空调
-				</div>
-			</view>
-
-			<view class="order-info-row">
-				<text class="info-label">服务地址</text>
-				<text class="info-value">杭州市滨江区江南大道 88 号数康中心</text>
-			</view>
-
-			<view class="order-info-row">
-				<text class="info-label">服务时间</text>
-				<text class="info-value">06-18 09:30</text>
-			</view>
-
-			<view class="order-info-row">
-				<text class="info-label">联系人</text>
-				<text class="info-value">王经理 138****5521</text>
-			</view>
-
-			<view class="order-info-row">
-				<text class="info-label">服务商</text>
-				<text class="info-value">杭州维保服务有限公司</text>
-			</view>
-
-			<div class="line-container">
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-			</div>
-			<div class="totle-price">
-				￥<span class="price">8,600.00</span>
-			</div>
+			<view v-if="loading" class="list-footer">加载中...</view>
+			<view v-else-if="orderList.length > 0" class="list-footer">{{ hasMore ? '上拉加载更多' : '没有更多了' }}</view>
 		</view>
 		<bar tabname="home" />
 	</view>
 </template>
 
 <script setup>
+	import { ref } from 'vue'
+	import { onReachBottom, onShow } from '@dcloudio/uni-app'
 	import bar from '@/components/tabBer/index.vue'
 	import AppHeader from '@/components/header.vue'
+	import { getUserOrderList } from '@/api/user.js'
+
+	const orderList = ref([])
+	const loading = ref(false)
+	const total = ref(0)
+	const page = ref(1)
+	const limit = 10
+	const hasMore = ref(true)
+
+	const statusMap = {
+		0: '未支付',
+		1: '待接单',
+		2: '待开始',
+		3: '进行中',
+		4: '已取消',
+		5: '已完成',
+		6: '超时'
+	}
+
+	const statusStyleMap = {
+		'未支付': { bg: '#fff7e6', color: '#ff7d00' },
+		'待派单': { bg: '#fff7e6', color: '#ff7d00' },
+		'待接单': { bg: '#fff4df', color: '#b46b4f' },
+		'待开始': { bg: '#fff4df', color: '#b46b4f' },
+		'进行中': { bg: '#e8f3ff', color: '#007aff' },
+		'已完成': { bg: '#e6f9ef', color: '#039855' },
+		'已取消': { bg: '#f1f4f8', color: '#999999' },
+		'超时': { bg: '#fff0f1', color: '#dc4c55' }
+		
+	}
+
+	const formatStatus = (status) => {
+		return statusMap[status] || `状态${status ?? '--'}`
+	}
+
+	const getStatusStyle = (status) => {
+		const currentStatus = formatStatus(status)
+		const currentStyle = statusStyleMap[currentStatus] || { bg: '#eef2f6', color: '#667085' }
+
+		return {
+			tagStyle: {
+				backgroundColor: currentStyle.bg
+			},
+			textStyle: {
+				color: currentStyle.color
+			}
+		}
+	}
+
+	const padZero = (value) => String(value).padStart(2, '0')
+
+	const formatTime = (timestamp) => {
+		if (!timestamp) {
+			return '--'
+		}
+
+		const normalizedTimestamp = timestamp.toString().length === 13 ? Number(timestamp) : Number(timestamp) * 1000
+		const date = new Date(normalizedTimestamp)
+
+		if (Number.isNaN(date.getTime())) {
+			return '--'
+		}
+
+		return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`
+	}
+
+	const formatHours = (hours) => {
+		if (hours === null || hours === undefined || hours === '') {
+			return '--小时'
+		}
+
+		return `${hours}小时`
+	}
+
+	const formatAddress = (order) => {
+		return order.address || order.address_data?.address || '--'
+	}
+
+	const formatContact = (addressData) => {
+		const safeAddressData = addressData || {}
+
+		if (!safeAddressData.contact_name && !safeAddressData.contact_phone) {
+			return '--'
+		}
+
+		return [safeAddressData.contact_name, safeAddressData.contact_phone].filter(Boolean).join(' ')
+	}
+
+	const normalizeOrderList = (list = []) => {
+		return list.map(item => ({
+			...item,
+			status: item.status === '' || item.status === null || item.status === undefined ? item.status : Number(item.status),
+			address_data: item.address_data || {}
+		}))
+	}
+
+	const fetchOrderList = async (reset = false) => {
+		if (loading.value) {
+			return
+		}
+
+		if (reset) {
+			page.value = 1
+			hasMore.value = true
+		}
+
+		if (!hasMore.value) {
+			return
+		}
+
+		loading.value = true
+
+		try {
+			const res = await getUserOrderList({
+				status: '',
+				page: page.value,
+				limit
+			})
+
+			if (res.code !== 1) {
+				uni.showToast({
+					title: res.msg || '订单获取失败',
+					icon: 'none'
+				})
+				return
+			}
+
+			const listData = normalizeOrderList(res.data?.data || [])
+			total.value = Number(res.data?.total || 0)
+			orderList.value = reset ? listData : [...orderList.value, ...listData]
+			hasMore.value = page.value < Number(res.data?.last_page || 0)
+
+			if (hasMore.value) {
+				page.value += 1
+			}
+		} catch (error) {
+			uni.showToast({
+				title: '订单获取失败',
+				icon: 'none'
+			})
+		} finally {
+			loading.value = false
+		}
+	}
+
+	const gotoOrderDetail = (order) => {
+		uni.navigateTo({
+			url: `/pages/user/order/orderDetail?id=${order.id}`
+		})
+	}
+
+	onShow(() => {
+		fetchOrderList(true)
+	})
+
+	onReachBottom(() => {
+		fetchOrderList()
+	})
+
 	const gotoInvoiceManagemrnt = () => {
 		uni.navigateTo({
 			url: '/pages/user/order/invoceManagement'
@@ -345,6 +511,28 @@
 		justify-content: space-between;
 	}
 
+	.order-section {
+		padding: 0 30rpx;
+	}
+
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin: 0 0 20rpx;
+	}
+
+	.section-title {
+		font-size: 30rpx;
+		font-weight: 600;
+		color: #1d2939;
+	}
+
+	.section-count {
+		font-size: 22rpx;
+		color: #667085;
+	}
+
 	.service-item {
 		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.15);
 		text-align: center;
@@ -373,7 +561,7 @@
 		background-color: #ffffff;
 		border-radius: 24rpx;
 		padding: 30rpx;
-		margin: 0 30rpx 24rpx;
+		margin: 0 0 24rpx;
 	}
 
 	.tag1 {
@@ -434,6 +622,13 @@
 		padding-bottom: 15rpx;
 		display: flex;
 		justify-content: space-between;
+		gap: 24rpx;
+	}
+
+	.no-border {
+		border-bottom: none;
+		padding-bottom: 0;
+		margin-bottom: 0;
 	}
 
 	.info-label {
@@ -447,6 +642,11 @@
 		font-size: 22rpx;
 		color: #1d2939;
 		line-height: 32rpx;
+	}
+
+	.info-value-right {
+		flex: 1;
+		text-align: right;
 	}
 
 	.price {
@@ -496,6 +696,27 @@
 		font-size: 42rpx;
 		color: #0f63d4;
 		margin-top: 20rpx;
+	}
+
+	.empty-state {
+		background-color: #ffffff;
+		border-radius: 24rpx;
+		padding: 60rpx 30rpx;
+		text-align: center;
+		margin-bottom: 24rpx;
+		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.08);
+	}
+
+	.empty-text {
+		font-size: 24rpx;
+		color: #98a2b3;
+	}
+
+	.list-footer {
+		text-align: center;
+		font-size: 22rpx;
+		color: #98a2b3;
+		padding: 10rpx 0 20rpx;
 	}
 
 	.price {

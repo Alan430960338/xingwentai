@@ -7,7 +7,7 @@
 			<!-- 搜索框 -->
 			<view class="search-input">
 				<uni-icons type="search" size="20" color="#999" />
-				<input class="search-placeholder" placeholder="搜索故障内容、机房地址、师傅" v-model="searchKeyword" @input="handleSearch" />
+				<input class="search-placeholder" placeholder="搜索标题、故障内容、师傅" v-model="searchKeyword" @input="handleSearch" />
 			</view>
 
 			<!-- 状态标签栏 -->
@@ -21,75 +21,69 @@
 
 		<view class="orderList">
 			<!-- 空状态 -->
-			<view v-if="filteredOrderList.length === 0" class="empty-state">
+			<view v-if="orderList.length === 0 && !loading" class="empty-state">
 				<uni-icons type="document" size="80" color="#ccc" />
 				<text class="empty-text">暂无工单</text>
 			</view>
 
 			<!-- 工单详情卡片 -->
-			<view class="order-card" v-for="(order, index) in filteredOrderList" :key="order.id" @click="gotoDetail(order)">
+			<view class="order-card" v-for="order in orderList" :key="order.id" @click="gotoDetail(order)">
 				<view class="order-title-row">
-					<text class="order-title">{{ order.title }}</text>
+					<text class="order-title">{{ order.title || '未命名工单' }}</text>
 					<view class="order-tag" :style="{ backgroundColor: getStatusColor(order.status).bg }">
 						<text class="tag-text" :style="{ color: getStatusColor(order.status).color }">
-							{{ order.status }}
+							{{ formatStatus(order.status) }}
 						</text>
 					</view>
 				</view>
 
 				<view class="order-title-row-tag">
-					<div class="tag1">
-						SLA <span>{{ order.sla }}</span>小时
-					</div>
-					<div class="tag2">
-						{{ order.type }}
-					</div>
+					<view class="tag1">SLA {{ formatHours(order.hours) }}</view>
+					<view class="tag2">{{ order.category_name || '暂无分类' }}</view>
 				</view>
 
 				<view class="order-info-row">
 					<text class="info-label">服务地址</text>
-					<text class="info-value">{{ order.address }}</text>
+					<text class="info-value">{{ formatAddress(order) }}</text>
 				</view>
 
 				<view class="order-info-row">
 					<text class="info-label">服务时间</text>
-					<text class="info-value">{{ order.serviceTime }}</text>
+					<text class="info-value">{{ formatTime(order.planned_start_time) }}</text>
 				</view>
 
 				<view class="order-info-row">
 					<text class="info-label">联系人</text>
-					<text class="info-value">{{ order.contact }}</text>
+					<text class="info-value">{{ formatContact(order.address_data) }}</text>
 				</view>
 
-				<view class="order-info-row">
+				<view class="order-info-row no-border">
 					<text class="info-label">服务商</text>
-					<text class="info-value">{{ order.provider }}</text>
+					<text class="info-value">{{ order.service_name || '暂未分配' }}</text>
 				</view>
 
-				<div class="line-container">
-					<div class="bottom-line" v-for="i in 4" :key="i" :class="{ active: i <= order.progress }" />
-				</div>
-				
-				<div class="totle-price">
-					<view>
-						￥<span class="price">{{ order.price }}</span>
-					</view>
-					<view style="display: flex;">
-						<div class="item-btn" v-if="order.status === '待派单' || order.status === '待接单'" @click.stop="cancelOrder(order)">
+				<view class="order-footer">
+					<text class="order-no">订单编号：{{ order.order_sn }}</text>
+					<view class="order-actions">
+						<view class="item-btn" v-if="[0, 1].includes(order.status)" @click.stop="cancelOrder(order)">
 							取消
-						</div>
-						<div class="item-btn" v-if="order.status === '已完成'" @click.stop="invoice(order)">
+						</view>
+						<view class="item-btn" v-if="[0, 1].includes(order.status)" @click.stop="editOrder(order)">
+							修改订单
+						</view>
+						<view class="item-btn" v-if="order.status === 5" @click.stop="invoice(order)">
 							申请发票
-						</div>
-						<div class="item-btn primary-btn" v-if="order.status === '待派单'" @click.stop="acceptOrder(order)">
-							接单
-						</div>
-						<div class="item-btn" v-if="order.status === '进行中'" @click.stop="viewProgress(order)">
+						</view>
+						<view class="item-btn" v-if="[2, 3, 6].includes(order.status)" @click.stop="viewProgress(order)">
 							查看进度
-						</div>
+						</view>
+						
 					</view>
-				</div>
+				</view>
 			</view>
+
+			<view v-if="loading" class="list-footer">加载中...</view>
+			<view v-else-if="orderList.length > 0" class="list-footer">{{ hasMore ? '上拉加载更多' : '没有更多了' }}</view>
 		</view>
 
 		<bar tabname="order"></bar>
@@ -97,204 +91,185 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
+import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import bar from '@/components/tabBer/index.vue'
 import AppHeader from '@/components/header.vue'
+import { cancelUserOrder, getUserOrderList } from '@/api/user.js'
 // ============ 搜索和筛选 ============
 const searchKeyword = ref('')
-const currentTab = ref('all')
+const currentTab = ref('')
+const orderList = ref([])
+const loading = ref(false)
+const total = ref(0)
+const page = ref(1)
+const limit = 10
+const hasMore = ref(true)
+let searchTimer = null
+let pendingRefresh = false
 
 // 标签列表
 const tabList = [
-	{ label: '全部', key: 'all' },
-	{ label: '待接单', key: '待接单' },
-	{ label: '待开始', key: '待开始' },
-	{ label: '进行中', key: '进行中' },
-	{ label: '已超时', key: '已超时' },
-	{ label: '已完成', key: '已完成' }
+	{ label: '全部', key: '' },
+	{ label: '未支付', key: 0 },
+	{ label: '待接单', key: 1 },
+	{ label: '待开始', key: 2 },
+	{ label: '进行中', key: 3 },
+	{ label: '已取消', key: 4 },
+	{ label: '已完成', key: 5 },
+	{ label: '超时', key: 6 }
 ]
 
-// ============ 模拟数据 ============
-const orderList = ref([
-	{
-		id: 1,
-		title: '机房精密空调告警维修',
-		status: '待派单',
-		sla: 4,
-		type: '机房空调',
-		address: '杭州市滨江区江南大道 88 号数康中心 3F',
-		serviceTime: '2026-06-18 09:30',
-		contact: '王经理 138****5521',
-		provider: '杭州维保服务有限公司',
-		price: '8,600.00',
-		progress: 1
-	},
-	{
-		id: 2,
-		title: '服务器硬件故障紧急排查',
-		status: '进行中',
-		sla: 2,
-		type: '服务器',
-		address: '杭州市西湖区文三路 100 号高新大厦 5F',
-		serviceTime: '2026-06-18 14:00',
-		contact: '李工 139****2234',
-		provider: '杭州迅维科技有限公司',
-		price: '3,200.00',
-		progress: 3
-	},
-	{
-		id: 3,
-		title: '网络设备季度巡检维护',
-		status: '待接单',
-		sla: 8,
-		type: '网络设备',
-		address: '杭州市余杭区未来科技城 66 号 A 栋',
-		serviceTime: '2026-06-17 10:00',
-		contact: '张主管 137****8899',
-		provider: '杭州网安服务有限公司',
-		price: '1,500.00',
-		progress: 0
-	},
-	{
-		id: 4,
-		title: 'UPS 电源主机更换',
-		status: '已完成',
-		sla: 6,
-		type: '电源设备',
-		address: '杭州市萧山区建设一路 168 号 IDC 机房',
-		serviceTime: '2026-06-16 09:00',
-		contact: '陈工 135****6677',
-		provider: '杭州电力技术服务有限公司',
-		price: '5,200.00',
-		progress: 4
-	},
-	{
-		id: 5,
-		title: '精密空调加湿器故障',
-		status: '待开始',
-		sla: 3,
-		type: '机房空调',
-		address: '杭州市拱墅区祥园路 88 号智慧园 2F',
-		serviceTime: '2026-06-19 08:30',
-		contact: '刘主管 136****7788',
-		provider: '杭州空调维保服务中心',
-		price: '2,800.00',
-		progress: 0
-	},
-	{
-		id: 6,
-		title: '网络交换机端口故障',
-		status: '已超时',
-		sla: 5,
-		type: '网络设备',
-		address: '杭州市上城区钱江路 66 号金融中心 12F',
-		serviceTime: '2026-06-15 16:00',
-		contact: '赵经理 159****3344',
-		provider: '杭州网络技术有限公司',
-		price: '4,100.00',
-		progress: 2
-	},
-	{
-		id: 7,
-		title: '机柜温湿度异常告警',
-		status: '进行中',
-		sla: 2,
-		type: '机房环境',
-		address: '杭州市滨江区科技园路 128 号 5F',
-		serviceTime: '2026-06-18 11:00',
-		contact: '孙工 188****5566',
-		provider: '杭州环境监控服务商',
-		price: '1,800.00',
-		progress: 2
-	},
-	{
-		id: 8,
-		title: '精密空调压缩机维修',
-		status: '待派单',
-		sla: 12,
-		type: '机房空调',
-		address: '杭州市西湖区西溪路 525 号数据中心',
-		serviceTime: '2026-06-20 09:00',
-		contact: '周经理 137****9900',
-		provider: '杭州制冷设备维修公司',
-		price: '12,000.00',
-		progress: 0
-	},
-	{
-		id: 9,
-		title: '数据中心电力巡检',
-		status: '待开始',
-		sla: 4,
-		type: '电力设备',
-		address: '杭州市钱塘区下沙科技园 88 号',
-		serviceTime: '2026-06-21 08:00',
-		contact: '吴工 135****4433',
-		provider: '杭州电力运维服务公司',
-		price: '2,300.00',
-		progress: 0
-	},
-	{
-		id: 10,
-		title: '精密空调漏水检测',
-		status: '已完成',
-		sla: 3,
-		type: '机房空调',
-		address: '杭州市滨江区江陵路 66 号数据中心 2F',
-		serviceTime: '2026-06-14 13:30',
-		contact: '郑经理 138****1122',
-		provider: '杭州空调技术服务有限公司',
-		price: '3,600.00',
-		progress: 4
-	}
-])
-
-// ============ 计算属性 - 过滤数据 ============
-const filteredOrderList = computed(() => {
-	let list = orderList.value
-	
-	// 状态筛选
-	if (currentTab.value !== 'all') {
-		list = list.filter(item => item.status === currentTab.value)
-	}
-	
-	// 关键词搜索
-	if (searchKeyword.value.trim()) {
-		const keyword = searchKeyword.value.trim()
-		list = list.filter(item => 
-			item.title.includes(keyword) || 
-			item.address.includes(keyword) || 
-			item.contact.includes(keyword) ||
-			item.provider.includes(keyword)
-		)
-	}
-	
-	return list
-})
-
 // ============ 方法 ============
+
+const statusMap = {
+	0: '未支付',
+	1: '待接单',
+	2: '待开始',
+	3: '进行中',
+	4: '已取消',
+	5: '已完成',
+	6: '超时'
+}
+
+const formatStatus = (status) => {
+	return statusMap[status] || `状态${status ?? '--'}`
+}
+
+const padZero = (value) => String(value).padStart(2, '0')
+
+const formatTime = (timestamp) => {
+	if (!timestamp) {
+		return '--'
+	}
+
+	const normalizedTimestamp = timestamp.toString().length === 13 ? Number(timestamp) : Number(timestamp) * 1000
+	const date = new Date(normalizedTimestamp)
+
+	if (Number.isNaN(date.getTime())) {
+		return '--'
+	}
+
+	return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`
+}
+
+const formatHours = (hours) => {
+	if (hours === null || hours === undefined || hours === '') {
+		return '--小时'
+	}
+
+	return `${hours}小时`
+}
+
+const formatAddress = (order) => {
+	return order.address || order.address_data?.address || '--'
+}
+
+const formatContact = (addressData) => {
+	const safeAddressData = addressData || {}
+
+	if (!safeAddressData.contact_name && !safeAddressData.contact_phone) {
+		return '--'
+	}
+
+	return [safeAddressData.contact_name, safeAddressData.contact_phone].filter(Boolean).join(' ')
+}
+
+const normalizeOrderList = (list = []) => {
+	return list.map(item => ({
+		...item,
+		status: item.status === '' || item.status === null || item.status === undefined ? item.status : Number(item.status),
+		address_data: item.address_data || {}
+	}))
+}
+
+const fetchOrderList = async (reset = false) => {
+	if (loading.value) {
+		if (reset) {
+			pendingRefresh = true
+		}
+		return
+	}
+
+	if (reset) {
+		page.value = 1
+		hasMore.value = true
+	}
+
+	if (!hasMore.value) {
+		return
+	}
+
+	loading.value = true
+
+	try {
+		const res = await getUserOrderList({
+			search: searchKeyword.value.trim(),
+			status: currentTab.value,
+			page: page.value,
+			limit
+		})
+
+		if (res.code !== 1) {
+			uni.showToast({
+				title: res.msg || '订单获取失败',
+				icon: 'none'
+			})
+			return
+		}
+
+		const listData = normalizeOrderList(res.data?.data || [])
+		total.value = Number(res.data?.total || 0)
+		orderList.value = reset ? listData : [...orderList.value, ...listData]
+		hasMore.value = page.value < Number(res.data?.last_page || 0)
+
+		if (hasMore.value) {
+			page.value += 1
+		}
+	} catch (error) {
+		uni.showToast({
+			title: '订单获取失败',
+			icon: 'none'
+		})
+	} finally {
+		loading.value = false
+
+		if (pendingRefresh) {
+			pendingRefresh = false
+			fetchOrderList(true)
+		}
+	}
+}
 
 // 获取状态颜色
 const getStatusColor = (status) => {
 	const colorMap = {
-		'待派单': { bg: '#fff7e6', color: '#ff7d00' },
+		'未支付': { bg: '#fff7e6', color: '#ff7d00' },
 		'待接单': { bg: '#fff7e6', color: '#ff7d00' },
 		'待开始': { bg: '#e8f3ff', color: '#007aff' },
 		'进行中': { bg: '#e8f3ff', color: '#007aff' },
 		'已完成': { bg: '#e6f9ef', color: '#039855' },
 		'已取消': { bg: '#f5f5f5', color: '#999' },
-		'已超时': { bg: '#ffe8e6', color: '#ff3b30' }
+		'超时': { bg: '#ffe8e6', color: '#ff3b30' }
 	}
-	return colorMap[status] || { bg: '#f5f5f5', color: '#999' }
+	return colorMap[formatStatus(status)] || { bg: '#f5f5f5', color: '#999' }
 }
 
 // 切换标签
 const switchTab = (key) => {
 	currentTab.value = key
+	fetchOrderList(true)
 }
 
 // 搜索
 const handleSearch = () => {
-	// 搜索逻辑由 computed 自动处理
+	if (searchTimer) {
+		clearTimeout(searchTimer)
+	}
+
+	searchTimer = setTimeout(() => {
+		fetchOrderList(true)
+	}, 300)
 }
 
 // 跳转详情
@@ -307,14 +282,47 @@ const gotoDetail = (order) => {
 // 取消订单
 const cancelOrder = (order) => {
 	uni.showModal({
-		title: '提示',
-		content: '确定要取消该工单吗？',
-		success: (res) => {
-			if (res.confirm) {
-				order.status = '已取消'
+		title: '取消订单',
+		content: '',
+		editable: true,
+		placeholderText: '取消订单原因',
+		success: async res => {
+			if (!res.confirm) {
+				return
+			}
+
+			const cancelRemark = (res.content || '').trim()
+			if (!cancelRemark) {
 				uni.showToast({
-					title: '已取消',
+					title: '请输入取消原因',
+					icon: 'none'
+				})
+				return
+			}
+
+			try {
+				const cancelRes = await cancelUserOrder({
+					id: order.id,
+					cancel_remark: cancelRemark
+				})
+
+				if (cancelRes.code !== 1) {
+					uni.showToast({
+						title: cancelRes.msg || '取消订单失败',
+						icon: 'none'
+					})
+					return
+				}
+
+				uni.showToast({
+					title: cancelRes.msg || '取消成功',
 					icon: 'success'
+				})
+				fetchOrderList(true)
+			} catch (error) {
+				uni.showToast({
+					title: '取消订单失败',
+					icon: 'none'
 				})
 			}
 		}
@@ -328,31 +336,30 @@ const invoice = (order) => {
 	})
 }
 
-// 接单
-const acceptOrder = (order) => {
-	uni.showModal({
-		title: '提示',
-		content: '确定要接单吗？',
-		success: (res) => {
-			if (res.confirm) {
-				order.status = '进行中'
-				order.progress = 2
-				uni.showToast({
-					title: '接单成功',
-					icon: 'success'
-				})
-			}
-		}
+const editOrder = (order) => {
+	if (!order?.id) {
+		return
+	}
+
+	uni.navigateTo({
+		url: `/pages/user/order/editOrder?id=${order.id}`
 	})
 }
 
 // 查看进度
 const viewProgress = (order) => {
-	uni.showToast({
-		title: `当前进度: ${order.progress}/4`,
-		icon: 'none'
+	uni.navigateTo({
+		url: `/pages/user/order/orderDetail?id=${order.id}`
 	})
 }
+
+onShow(() => {
+	fetchOrderList(true)
+})
+
+onReachBottom(() => {
+	fetchOrderList()
+})
 </script>
 
 <style scoped>
@@ -557,6 +564,13 @@ const viewProgress = (order) => {
 	padding-bottom: 15rpx;
 	display: flex;
 	justify-content: space-between;
+	gap: 24rpx;
+}
+
+.no-border {
+	margin-bottom: 0;
+	padding-bottom: 0;
+	border-bottom: none;
 }
 
 .info-label {
@@ -572,33 +586,27 @@ const viewProgress = (order) => {
 	color: #1d2939;
 	line-height: 32rpx;
 	text-align: right;
+	flex: 1;
 }
 
 /* 进度条 */
-.line-container {
-	display: flex;
-	justify-content: space-between;
-	margin: 20rpx 0 16rpx;
-}
-
-.bottom-line {
-	width: 22%;
-	height: 10rpx;
-	border-radius: 30rpx;
-	background: #e5edf7;
-}
-
-.bottom-line.active {
-	background: linear-gradient(to right, #166ae7, #12b4ca);
-}
-
-.totle-price {
+.order-footer {
 	align-items: center;
 	justify-content: space-between;
 	display: flex;
-	font-size: 42rpx;
-	color: #0f63d4;
 	margin-top: 20rpx;
+	padding-top: 20rpx;
+	border-top: 1rpx solid #eef2f6;
+}
+
+.order-no {
+	font-size: 22rpx;
+	color: #667085;
+}
+
+.order-actions {
+	display: flex;
+	align-items: center;
 }
 
 .item-btn {
@@ -618,8 +626,10 @@ const viewProgress = (order) => {
 	border: none;
 }
 
-.price {
-	font-size: 42rpx;
-	color: #0f63d4;
+.list-footer {
+	text-align: center;
+	font-size: 24rpx;
+	color: #98a2b3;
+	padding: 10rpx 0 140rpx;
 }
 </style>

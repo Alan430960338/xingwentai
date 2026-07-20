@@ -3,95 +3,81 @@
 		<AppHeader title="订单详情" content="工单详情" :back="true" ></AppHeader>
 		<!-- 顶部进度提示框 -->
 		<view class="top-tip">
-			<text class="tip-text">当前进度：师傅已到场，正在检测高压保护和冷凝风机。</text>
+			<text class="tip-text">{{ progressTip }}</text>
 		</view>
 
 		<!-- 工单详情卡片 -->
 		<view class="order-card" >
 			<view class="order-title-row">
-				<text class="order-title">机房精密空调告警维修</text>
-				<view class="order-tag">
-					<text class="tag-text">待派单</text>
+				<text class="order-title">{{ detailData.title || '未命名工单' }}</text>
+				<view class="order-tag" :style="getStatusStyle(detailData.status).tagStyle">
+					<text class="tag-text" :style="getStatusStyle(detailData.status).textStyle">{{ formatStatus(detailData.status) }}</text>
 				</view>
 			</view>
 
 			<view class="order-title-row-tag">
-				<div class="tag1">
-					SLA <span>4</span>小时
-				</div>
+				<view class="tag1">SLA {{ formatHours(detailData.hours) }}</view>
 
-				<div class="tag2">
-					机房空调
-				</div>
+				<view class="tag2">{{ detailData.category_name || '暂无分类' }}</view>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">服务地址</text>
-				<text class="info-value">杭州市滨江区江南大道 88 号数康中心</text>
+				<text class="info-value info-value-right">{{ detailData.address || '--' }}</text>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">服务时间</text>
-				<text class="info-value">06-18 09:30</text>
+				<text class="info-value info-value-right">{{ formatTime(detailData.planned_time || detailData.planned_start_time) }}</text>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">联系人</text>
-				<text class="info-value">王经理 138****5521</text>
+				<text class="info-value info-value-right">{{ formatContact(detailData.nickname, detailData.mobile) }}</text>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">服务商</text>
-				<text class="info-value">杭州维保服务有限公司</text>
+				<text class="info-value info-value-right">{{ detailData.service_name || '暂未分配' }}</text>
 			</view>
 
-			<div class="line-container">
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-			</div>
-			<div class="totle-price">
+			<view class="order-info-row">
+				<text class="info-label">故障描述</text>
+				<text class="info-value info-value-right">{{ detailData.fault_description || '--' }}</text>
+			</view>
+
+			<view class="order-info-row no-border">
+				<text class="info-label">订单编号</text>
+				<text class="info-value info-value-right">{{ detailData.order_sn || detailData.id || '--' }}</text>
+			</view>
+
+			<view class="line-container">
+				<view class="bottom-line" v-for="item in progressBars" :key="item" :class="{ active: item <= progressBarsActive }" />
+			</view>
+			<view class="totle-price">
 				<view>
-					￥<span class="price">8,600.00</span>
+					￥<text class="price">{{ formatMoney(detailData.budget_amount) }}</text>
 				</view>
 				<view style="display: flex;">
-					<div class="cancel-btn">
+					<view class="cancel-btn" v-if="[0, 1].includes(detailData.status)">
 						取消
-					</div>
-					<div class="edit-btn">
+					</view>
+					<view class="edit-btn" v-if="detailData.status === 5" @click.stop="editOrder">
 						修改订单
-					</div>
+					</view>
 				</view>
 			
-			</div>
+			</view>
 		</view>
 		<!-- 工单进度流程卡片 -->
 		<view class="progress-card">
 			<text class="card-title">工单进度</text>
 			<view class="step-list">
-				<!-- 步骤1 -->
-				<view class="step-item">
-					<view class="step-dot active"></view>
+				<view class="step-item" v-for="item in progressList" :key="item.key">
+					<view class="step-dot" :class="{ active: item.active }"></view>
 					<view class="step-content">
-						<text class="step-title">已发布</text>
-						<text class="step-desc">06-16 10:20 客户发布空调维修工单</text>
-					</view>
-				</view>
-				<!-- 步骤2 -->
-				<view class="step-item">
-					<view class="step-dot active"></view>
-					<view class="step-content">
-						<text class="step-title">已接单</text>
-						<text class="step-desc">06-16 10:36 李师傅接单</text>
-					</view>
-				</view>
-				<!-- 步骤3 -->
-				<view class="step-item">
-					<view class="step-dot active"></view>
-					<view class="step-content">
-						<text class="step-title">已签到</text>
-						<text class="step-desc">06-18 09:26 已到达数据中心</text>
+						<text class="step-title">{{ item.title }}</text>
+						<text class="step-desc">{{ item.desc }}</text>
 					</view>
 				</view>
 			</view>
@@ -100,7 +86,177 @@
 </template>
 
 <script setup>
+	import { computed, ref } from 'vue'
+	import { onLoad } from '@dcloudio/uni-app'
 	import AppHeader from '@/components/header.vue'
+	import { getUserOrderDetail } from '@/api/user.js'
+
+	const detailData = ref({})
+	const progressBars = [1, 2, 3, 4]
+
+	const statusMap = {
+		0: '未支付',
+		1: '待接单',
+		2: '待开始',
+		3: '进行中',
+		4: '已取消',
+		5: '已完成',
+		6: '超时'
+	}
+
+	const statusStyleMap = {
+		'未支付': { bg: '#fff7e6', color: '#ff7d00' },
+		'待接单': { bg: '#fff4df', color: '#b46b4f' },
+		'待开始': { bg: '#fff4df', color: '#b46b4f' },
+		'进行中': { bg: '#e8f3ff', color: '#007aff' },
+		'已完成': { bg: '#e6f9ef', color: '#039855' },
+		'已取消': { bg: '#f1f4f8', color: '#999999' },
+		'超时': { bg: '#fff0f1', color: '#dc4c55' }
+	}
+
+	const formatStatus = status => {
+		return statusMap[status] || `状态${status ?? '--'}`
+	}
+
+	const getStatusStyle = status => {
+		const currentStatus = formatStatus(status)
+		const currentStyle = statusStyleMap[currentStatus] || { bg: '#eef2f6', color: '#667085' }
+
+		return {
+			tagStyle: {
+				backgroundColor: currentStyle.bg
+			},
+			textStyle: {
+				color: currentStyle.color
+			}
+		}
+	}
+
+	const padZero = value => String(value).padStart(2, '0')
+
+	const formatTime = timestamp => {
+		if (!timestamp) {
+			return '--'
+		}
+
+		if (typeof timestamp === 'string' && timestamp.includes('-')) {
+			return timestamp
+		}
+
+		const normalizedTimestamp = timestamp.toString().length === 13 ? Number(timestamp) : Number(timestamp) * 1000
+		const date = new Date(normalizedTimestamp)
+
+		if (Number.isNaN(date.getTime())) {
+			return '--'
+		}
+
+		return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`
+	}
+
+	const formatHours = hours => {
+		if (hours === null || hours === undefined || hours === '') {
+			return '--小时'
+		}
+
+		return `${hours}小时`
+	}
+
+	const formatMoney = amount => {
+		if (amount === null || amount === undefined || amount === '') {
+			return '--'
+		}
+
+		return Number(amount).toFixed(2)
+	}
+
+	const formatContact = (name, mobile) => {
+		if (!name && !mobile) {
+			return '--'
+		}
+
+		return [name, mobile].filter(Boolean).join(' ')
+	}
+
+	const progressList = computed(() => {
+		const progress = Array.isArray(detailData.value.progress) ? detailData.value.progress : []
+		if (progress.length > 0) {
+			return progress.map((item, index) => ({
+				key: `${item.type || 'progress'}_${index}`,
+				title: item.type || '进度更新',
+				desc: [item.time || '暂无时间', item.name || ''].filter(Boolean).join(' '),
+				active: true
+			}))
+		}
+
+		return [
+			{
+				key: 'create_time',
+				title: '已发布',
+				desc: formatTime(detailData.value.createtime),
+				active: true
+			},
+			...items
+		]
+	})
+
+	const progressBarsActive = computed(() => {
+		return Math.max(progressList.value.filter(item => item.active).length, 1)
+	})
+
+	const progressTip = computed(() => {
+		const latestProgress = [...progressList.value].reverse().find(item => item.active)
+		if (!latestProgress) {
+			return '当前进度：暂无进度信息。'
+		}
+
+		return `当前进度：${latestProgress.title}，时间 ${latestProgress.desc}`
+	})
+
+	const fetchOrderDetail = async id => {
+		try {
+			const res = await getUserOrderDetail({ id })
+
+			if (res.code !== 1) {
+				uni.showToast({
+					title: res.msg || '详情获取失败',
+					icon: 'none'
+				})
+				return
+			}
+
+			detailData.value = {
+				...res.data,
+				status: res.data?.status === '' || res.data?.status === null || res.data?.status === undefined ? res.data?.status : Number(res.data.status)
+			}
+		} catch (error) {
+			uni.showToast({
+				title: '详情获取失败',
+				icon: 'none'
+			})
+		}
+	}
+
+	const editOrder = () => {
+		if (!detailData.value?.id) {
+			return
+		}
+
+		uni.navigateTo({
+			url: `/pages/user/order/editOrder?id=${detailData.value.id}`
+		})
+	}
+
+	onLoad(options => {
+		if (!options?.id) {
+			uni.showToast({
+				title: '缺少订单ID',
+				icon: 'none'
+			})
+			return
+		}
+
+		fetchOrderDetail(options.id)
+	})
 </script>
 
 <style scoped>
@@ -306,10 +462,11 @@
 		font-size: 30rpx;
 		color: #1d2939;
 		font-weight: 600;
+		flex: 1;
+		margin-right: 20rpx;
 	}
 	
 	.order-tag {
-		background-color: #fff7e6;
 		border-radius: 20rpx;
 		padding: 6rpx 12rpx;
 		font-size: 20rpx;
@@ -317,7 +474,6 @@
 	
 	.tag-text {
 		font-size: 20rpx;
-		color: #ff7d00;
 	}
 	
 	.order-info-row {
@@ -326,6 +482,13 @@
 		padding-bottom: 15rpx;
 		display: flex;
 		justify-content: space-between;
+		gap: 24rpx;
+	}
+
+	.no-border {
+		border-bottom: none;
+		padding-bottom: 0;
+		margin-bottom: 0;
 	}
 	
 	.info-label {
@@ -339,6 +502,11 @@
 		font-size: 22rpx;
 		color: #1d2939;
 		line-height: 32rpx;
+	}
+
+	.info-value-right {
+		flex: 1;
+		text-align: right;
 	}
 	
 	.price {
@@ -381,6 +549,10 @@
 		width: 22%;
 		height: 10rpx;
 		border-radius: 30rpx;
+		background: #e5edf7;
+	}
+
+	.bottom-line.active {
 		background: linear-gradient(to right, #166ae7, #12b4ca);
 	}
 	

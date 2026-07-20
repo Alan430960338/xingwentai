@@ -68,6 +68,13 @@
 		}
 	},
 	{
+		"path": "pages/user/order/editOrder",
+		"style": {
+			"navigationBarTitleText": "修改订单",
+			"navigationStyle": "custom"
+		}
+	},
+	{
 		"path": "pages/user/order/requestInvoice",
 		"style": {
 			"navigationBarTitleText": "申请发票",
@@ -82,6 +89,20 @@
 		}
 	},
 	{
+		"path": "pages/user/order/invoiceTitle",
+		"style": {
+			"navigationBarTitleText": "发票抬头",
+			"navigationStyle": "custom"
+		}
+	},
+	{
+		"path": "pages/user/order/addInvoiceTitle",
+		"style": {
+			"navigationBarTitleText": "新增发票抬头",
+			"navigationStyle": "custom"
+		}
+	},
+	{
 		"path": "pages/user/company/comInfo",
 		"style": {
 			"navigationBarTitleText": "企业资料",
@@ -92,6 +113,13 @@
 		"path": "pages/user/address/address",
 		"style": {
 			"navigationBarTitleText": "常用地址",
+			"navigationStyle": "custom"
+		}
+	},
+	{
+		"path": "pages/user/address/add",
+		"style": {
+			"navigationBarTitleText": "新增地址",
 			"navigationStyle": "custom"
 		}
 	},
@@ -262,6 +290,12 @@
 		"style": {
 			"navigationBarTitleText": "订单详情",
 			"navigationStyle": "custom"
+		}
+	},
+	{
+		"path": "pages/user/address/city",
+		"style": {
+			"navigationBarTitleText": "选择城市"
 		}
 	}
   ],

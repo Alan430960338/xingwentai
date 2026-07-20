@@ -1,4 +1,4 @@
-import { baseUrl } from "./config.js";
+import { baseUrl } from "../config/config.js";
 
 const JSON_HEADER = { "Content-Type": "application/json;charset=UTF-8" };
 const FORM_HEADER = {

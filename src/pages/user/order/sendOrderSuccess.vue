@@ -1,7 +1,6 @@
 <template>
 	<view class="page-wrap">
 		<AppHeader title="发布成功" content="发布成功"   :imageType=2></AppHeader>
-		<!-- 成功提示卡片 -->
 		<view class="success-card">
 			<view class="success-icon">
 				<uni-icons type="checkmarkempty" size="20" color="#34c759" />
@@ -9,81 +8,257 @@
 			<text class="success-text">已发布至大厅</text>
 		</view>
 
-		<!-- 工单详情卡片 -->
-		<view class="order-card">
+		<view v-if="loading" class="loading-card">订单详情加载中...</view>
+
+		<view v-else class="order-card">
 			<view class="order-title-row">
-				<text class="order-title">机房精密空调告警维修</text>
+				<text class="order-title">{{ detailData.title || '未命名工单' }}</text>
 				<view class="order-tag">
-					<text class="tag-text">待派单</text>
+					<text class="tag-text">{{ formatStatus(detailData.status) }}</text>
 				</view>
 			</view>
 
 			<view class="order-title-row-tag">
-				<div class="tag1">
-					SLA <span>4</span>小时
-				</div>
+				<view class="tag1">
+					SLA <text>{{ formatHours(detailData.hours) }}</text>
+				</view>
 
-				<div class="tag2">
-					机房空调
-				</div>
+				<view class="tag2">
+					{{ detailData.category_name || '暂无分类' }}
+				</view>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">服务地址</text>
-				<text class="info-value">杭州市滨江区江南大道 88 号数康中心</text>
+				<text class="info-value">{{ detailData.address || '--' }}</text>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">服务时间</text>
-				<text class="info-value">06-18 09:30</text>
+				<text class="info-value">{{ formatTime(detailData.planned_time || detailData.planned_start_time) }}</text>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">联系人</text>
-				<text class="info-value">王经理 138****5521</text>
+				<text class="info-value">{{ formatContact(detailData.nickname, detailData.mobile) }}</text>
 			</view>
 
 			<view class="order-info-row">
 				<text class="info-label">服务商</text>
-				<text class="info-value">杭州维保服务有限公司</text>
+				<text class="info-value">{{ detailData.service_name || '暂未分配' }}</text>
 			</view>
 
-			<div class="line-container">
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-				<div class="bottom-line" />
-			</div>
-			<div class="totle-price">
+			<view class="order-info-row">
+				<text class="info-label">故障描述</text>
+				<text class="info-value">{{ detailData.fault_description || '--' }}</text>
+			</view>
+
+			<view class="order-info-row no-border">
+				<text class="info-label">订单编号</text>
+				<text class="info-value">{{ detailData.order_sn || detailData.id || '--' }}</text>
+			</view>
+
+			<view class="line-container">
+				<view class="bottom-line" />
+				<view class="bottom-line" />
+				<view class="bottom-line" />
+				<view class="bottom-line" />
+			</view>
+			<view class="totle-price">
 				<view>
-					￥<span class="price">8,600.00</span>
+					￥<text class="price">{{ formatMoney(detailData.budget_amount) }}</text>
 				</view>
 				<view style="display: flex;">
-					<div class="cancel-btn">
+					<view class="cancel-btn" @click.stop="cancelOrder">
 						取消
-					</div>
-					<div class="edit-btn">
+					</view>
+					<view class="edit-btn" @click.stop="editOrder">
 						修改订单
-					</div>
+					</view>
 				</view>
-
-			</div>
+			</view>
 		</view>
 
-		<!-- 底部返回首页按钮 -->
-		<mybtn text="回到首页"@click="gohome" type="primary" style="position: absolute; bottom: 30rpx; left: 30rpx;right: 30rpx;"></mybtn>
+		<mybtn text="回到首页"@click="gohome" type="primary" style="position: fixed; bottom: 30rpx; left: 30rpx;right: 30rpx;"></mybtn>
 	</view>
 </template>
 
 <script setup>
+	import { ref } from 'vue'
+	import { onLoad } from '@dcloudio/uni-app'
 	import AppHeader from '@/components/header.vue'
 	import mybtn from '@/components/button/btmBtn.vue'
+	import { cancelUserOrder, getUserOrderDetail } from '@/api/user.js'
+
+	const loading = ref(false)
+	const detailData = ref({})
+
+	const padZero = value => String(value).padStart(2, '0')
+
+	const formatTime = timestamp => {
+		if (!timestamp) {
+			return '--'
+		}
+
+		if (typeof timestamp === 'string' && timestamp.includes('-')) {
+			return timestamp
+		}
+
+		const normalizedTimestamp = timestamp.toString().length === 13 ? Number(timestamp) : Number(timestamp) * 1000
+		const date = new Date(normalizedTimestamp)
+		if (Number.isNaN(date.getTime())) {
+			return '--'
+		}
+
+		return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`
+	}
+
+	const formatHours = hours => {
+		if (hours === null || hours === undefined || hours === '') {
+			return '--小时'
+		}
+
+		return `${hours}小时`
+	}
+
+	const formatMoney = amount => {
+		if (amount === null || amount === undefined || amount === '') {
+			return '--'
+		}
+
+		return Number(amount).toFixed(2)
+	}
+
+	const formatContact = (name, mobile) => {
+		if (!name && !mobile) {
+			return '--'
+		}
+
+		return [name, mobile].filter(Boolean).join(' ')
+	}
+
+	const formatStatus = status => {
+		const statusMap = {
+			0: '未支付',
+			1: '待接单',
+			2: '待开始',
+			3: '进行中',
+			4: '已取消',
+			5: '已完成',
+			6: '超时'
+		}
+
+		return statusMap[status] || `状态${status ?? '--'}`
+	}
+
+	const fetchOrderDetail = async id => {
+		loading.value = true
+
+		try {
+			const res = await getUserOrderDetail({ id })
+
+			if (res.code !== 1) {
+				uni.showToast({
+					title: res.msg || '详情获取失败',
+					icon: 'none'
+				})
+				return
+			}
+
+			detailData.value = {
+				...res.data,
+				status: res.data?.status === '' || res.data?.status === null || res.data?.status === undefined ? res.data?.status : Number(res.data.status)
+			}
+		} catch (error) {
+			uni.showToast({
+				title: '详情获取失败',
+				icon: 'none'
+			})
+		} finally {
+			loading.value = false
+		}
+	}
+
+	const cancelOrder = () => {
+		if (!detailData.value?.id) {
+			return
+		}
+
+		uni.showModal({
+			title: '取消订单',
+			content: '',
+			editable: true,
+			placeholderText: '请输入取消订单原因',
+			success: async res => {
+				if (!res.confirm) {
+					return
+				}
+
+				const cancelRemark = (res.content || '').trim()
+				if (!cancelRemark) {
+					uni.showToast({
+						title: '请输入取消原因',
+						icon: 'none'
+					})
+					return
+				}
+
+				try {
+					const cancelRes = await cancelUserOrder({
+						id: detailData.value.id,
+						cancel_remark: cancelRemark
+					})
+
+					if (cancelRes.code !== 1) {
+						uni.showToast({
+							title: cancelRes.msg || '取消订单失败',
+							icon: 'none'
+						})
+						return
+					}
+
+					uni.showToast({
+						title: cancelRes.msg || '取消成功',
+						icon: 'success'
+					})
+					fetchOrderDetail(detailData.value.id)
+				} catch (error) {
+					uni.showToast({
+						title: '取消订单失败',
+						icon: 'none'
+					})
+				}
+			}
+		})
+	}
+
 	const gohome = ()=>{
-		uni.navigateTo({
+		uni.reLaunch({
 			url:'/pages/user/tabbar/index'
 		})
 	}
-	
+
+	const editOrder = () => {
+		if (!detailData.value?.id) {
+			return
+		}
+
+		uni.navigateTo({
+			url: `/pages/user/order/editOrder?id=${detailData.value.id}`
+		})
+	}
+
+	onLoad(options => {
+		if (!options?.id) {
+			uni.showToast({
+				title: '缺少订单ID',
+				icon: 'none'
+			})
+			return
+		}
+
+		fetchOrderDetail(options.id)
+	})
 </script>
 
 <style scoped>
@@ -92,7 +267,7 @@
 		background-color: #f0f7ff;
 		width: 750rpx;
 		box-sizing: border-box;
-		padding: 0 0rpx 30rpx;
+		padding: 0 0rpx 140rpx;
 	}
 
 
@@ -179,6 +354,16 @@
 		font-size: 38rpx;
 		color: #1d2939;
 		font-weight: 500;
+	}
+
+	.loading-card {
+		background: #ffffff;
+		border-radius: 24rpx;
+		padding: 60rpx 30rpx;
+		text-align: center;
+		font-size: 28rpx;
+		color: #667085;
+		margin: 0 30rpx;
 	}
 
 	/* 工单卡片 */

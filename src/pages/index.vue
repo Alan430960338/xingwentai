@@ -70,40 +70,66 @@
 	import {
 		ref
 	} from 'vue'
-
-	//工程师身份选择
-	const isEngineer = ref(1)
+	import { login } from '@/api/user.js'
 
 	let agree = ref(false)
 
-
-	//跳转到用户端
-	function wxLogin() {
-		uni.navigateTo({
-			url: '/pages/user/tabbar/index',
-		})
-	}
-
-	//判断是否有工程师身份，如果是则跳转到工程师主页，否则跳转申请工程师
-	function gotoEngineer() {
-		if (isEngineer.value) {
-			uni.navigateTo({
-				url: '/pages/engineer/tabbar/home',
-			})
-		} else {
-			uni.navigateTo({
-				url: '/pages/engineer/certification',
+	async function handleLogin(id) {
+		try {
+			const res = await login({ id })
+			if (res.code === 1) {
+				const token = res.data.userinfo.token
+				uni.setStorageSync('token', token)
+				uni.showToast({
+					title: '登录成功',
+					icon: 'success',
+					duration: 1500
+				})
+				setTimeout(() => {
+					if (id === 1) {
+						uni.navigateTo({
+							url: '/pages/user/tabbar/index',
+						})
+					} else if (id === 2) {
+						uni.navigateTo({
+							url: '/pages/engineer/tabbar/home',
+						})
+					} else if (id === 3) {
+						uni.navigateTo({
+							url: '/pages/serviceProvider/tabbar/workbench',
+						})
+					}
+				}, 1500)
+			} else {
+				uni.showToast({
+					title: res.msg || '登录失败',
+					icon: 'none',
+					duration: 1500
+				})
+			}
+		} catch (error) {
+			uni.showToast({
+				title: '网络请求失败',
+				icon: 'none',
+				duration: 1500
 			})
 		}
 	}
-	function gotoService(){
-		uni.navigateTo({
-				url: '/pages/serviceProvider/tabbar/workbench',
-			})
+
+	function wxLogin() {
+		handleLogin(1)
 	}
+
+	function gotoEngineer() {
+		handleLogin(2)
+	}
+
+	function gotoService() {
+		handleLogin(3)
+	}
+
 	function change() {
 		agree.value = !agree.value
-		console.log(agree.value)
 	}
 </script>
 

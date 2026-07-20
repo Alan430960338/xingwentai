@@ -1,6 +1,6 @@
 <template>
 	<view class="page-wrap">
-		<AppHeader title="发单" content="发布IT运维需求" :imageType=2></AppHeader>
+		<AppHeader title="修改订单" content="修改订单信息" :back="true"></AppHeader>
 
 		<view class="form-box">
 			<view class="form-item" @click="selectCategory">
@@ -45,24 +45,6 @@
 				<input v-model="formData.budgetAmount" class="input" placeholder="请输入预算价格" placeholder-class="input-placeholder" type="digit" />
 			</view>
 
-			<view class="form-item">
-				<text class="label">工时</text>
-				<input v-model="formData.plannedHours" class="input" placeholder="请输入工时" placeholder-class="input-placeholder" type="digit" />
-			</view>
-
-			<view class="upload-wrap">
-				<text class="upload-title">工程量/设备清单（可上传附件）</text>
-				<view class="upload-box" @click="handleUploadAttachment">
-					<image v-if="attachment.fullurl" class="upload-preview" :src="attachment.fullurl" mode="aspectFill" />
-					<view v-else class="upload-empty">
-						<text class="upload-text">上传附件</text>
-						<text class="upload-tips">支持上传图片，点击选择</text>
-					</view>
-					<view v-if="uploading" class="upload-mask">上传中...</view>
-				</view>
-				<text v-if="attachment.fullurl" class="upload-action" @click.stop="clearAttachment">重新上传</text>
-			</view>
-
 			<view class="form-item arrow-item" @click="selectInvoiceType">
 				<text class="label-strong">发票需求</text>
 				<view class="picker-row picker-row-right">
@@ -72,32 +54,21 @@
 			</view>
 		</view>
 
-		<view class="agree-row">
-			<checkbox-group @change="handleAgreementChange">
-				<checkbox value="agree" :checked="agreed" color="#007aff" />
-			</checkbox-group>
-			<text class="agree-text">我已阅读《平台交易规则与协议》</text>
-		</view>
-
-		<mybtn text="提交"  @click="commitOrder" type="primary" 
-			style="position: absolute;  left: 30rpx;right: 30rpx;"></mybtn>
-
-		<bar tabname="sendOrder" />
+		<mybtn text="保存修改" @click="handleSubmit" type="primary"
+			style="position: absolute; left: 30rpx; right: 30rpx;"></mybtn>
 	</view>
 </template>
 
 <script setup>
 	import { computed, onMounted, reactive, ref } from 'vue'
-	import bar from '@/components/tabBer/index.vue'
-	import mybtn from '@/components/button/btmBtn.vue'
+	import { onLoad } from '@dcloudio/uni-app'
 	import AppHeader from '@/components/header.vue'
-	import { uploadCommonFile } from '@/api/common.js'
-	import { createDemand, getDefaultAddress, getDemandCategoryList } from '@/api/user.js'
+	import mybtn from '@/components/button/btmBtn.vue'
+	import { getDemandCategoryList, getUserOrderDetail, updateDemand } from '@/api/user.js'
 
-	const navigating = ref(false)
-	const uploading = ref(false)
-	const agreed = ref(false)
-	const loadingCategory = ref(false)
+	const orderId = ref('')
+	const loading = ref(false)
+	const submitting = ref(false)
 	const categoryOptions = ref([])
 	const addressOptions = ref([])
 	const dateTimePickerRange = ref([[], [], [], [], []])
@@ -109,28 +80,23 @@
 		addressId: '',
 		plannedStartTimestamp: 0,
 		budgetAmount: '',
-		plannedHours: '',
 		invoiceType: ''
-	})
-	const attachment = reactive({
-		filePath: '',
-		url: '',
-		fullurl: ''
 	})
 
 	const invoiceTypeOptions = [
 		{ label: '不需要', value: 0 },
 		{ label: '个人普通发票', value: 1 },
-		{ label: '专票', value: 2 }
+		{ label: '企业普通发票', value: 2 },
+		{ label: '企业专用发票', value: 3 }
 	]
 
 	const selectedCategoryText = computed(() => {
-		const current = categoryOptions.value.find(item => item.id === formData.categoryId)
+		const current = categoryOptions.value.find(item => String(item.id) === String(formData.categoryId))
 		return current?.name || ''
 	})
 
 	const selectedAddressText = computed(() => {
-		const current = addressOptions.value.find(item => item.id === formData.addressId)
+		const current = addressOptions.value.find(item => String(item.id) === String(formData.addressId))
 		if (!current) {
 			return ''
 		}
@@ -157,16 +123,10 @@
 		return `${year}-${month}-${day} ${hour}:${minute}`
 	})
 
-	const handleAgreementChange = event => {
-		agreed.value = event.detail.value.includes('agree')
-	}
-
 	const fetchCategoryList = async () => {
-		if (loadingCategory.value || categoryOptions.value.length > 0) {
+		if (categoryOptions.value.length > 0) {
 			return
 		}
-
-		loadingCategory.value = true
 
 		try {
 			const res = await getDemandCategoryList({ type: 'type' })
@@ -178,31 +138,6 @@
 			categoryOptions.value = Array.isArray(res.data) ? res.data : []
 		} catch (error) {
 			uni.showToast({ title: '项目类型获取失败', icon: 'none' })
-		} finally {
-			loadingCategory.value = false
-		}
-	}
-
-	const fetchDefaultAddress = async () => {
-		try {
-			const res = await getDefaultAddress()
-			if (res.code !== 1) {
-				return
-			}
-
-			const defaultAddress = res.data || null
-			if (!defaultAddress?.id) {
-				return
-			}
-
-			const exists = addressOptions.value.find(item => item.id === defaultAddress.id)
-			if (!exists) {
-				addressOptions.value = [defaultAddress, ...addressOptions.value]
-			}
-
-			formData.addressId = defaultAddress.id
-		} catch (error) {
-			// 默认地址获取失败时静默处理，避免影响发单页首屏
 		}
 	}
 
@@ -222,11 +157,6 @@
 	}
 
 	const selectAddress = () => {
-		if (navigating.value) {
-			return
-		}
-
-		navigating.value = true
 		uni.navigateTo({
 			url: '/pages/user/address/address?select=1',
 			success: res => {
@@ -235,18 +165,13 @@
 						return
 					}
 
-					const exists = addressOptions.value.find(address => address.id === item.id)
+					const exists = addressOptions.value.find(address => String(address.id) === String(item.id))
 					if (!exists) {
 						addressOptions.value = [item, ...addressOptions.value]
 					}
 
 					formData.addressId = item.id || ''
 				})
-			},
-			complete: () => {
-				setTimeout(() => {
-					navigating.value = false
-				}, 300)
 			}
 		})
 	}
@@ -318,14 +243,14 @@
 		formData.plannedStartTimestamp = Math.floor(new Date(`${year}-${month}-${day} ${hour}:${minute}:00`).getTime() / 1000)
 	}
 
-	const initDateTimePicker = () => {
-		const now = new Date()
+	const setDateTimePickerByTimestamp = timestamp => {
+		const date = timestamp ? new Date(Number(timestamp) * 1000) : new Date()
 		const years = createYearOptions()
-		const currentYear = `${now.getFullYear()}年`
-		const currentMonth = String(now.getMonth() + 1).padStart(2, '0')
-		const currentDay = String(now.getDate()).padStart(2, '0')
-		const currentHour = String(now.getHours()).padStart(2, '0')
-		const currentMinute = String(now.getMinutes()).padStart(2, '0')
+		const currentYear = `${date.getFullYear()}年`
+		const currentMonth = String(date.getMonth() + 1).padStart(2, '0')
+		const currentDay = String(date.getDate()).padStart(2, '0')
+		const currentHour = String(date.getHours()).padStart(2, '0')
+		const currentMinute = String(date.getMinutes()).padStart(2, '0')
 
 		dateTimePickerValue.value = [
 			Math.max(years.findIndex(item => item === currentYear), 0),
@@ -351,59 +276,53 @@
 		syncPlannedStartTime(dateTimePickerValue.value)
 	}
 
-	const clearAttachment = () => {
-		attachment.filePath = ''
-		attachment.url = ''
-		attachment.fullurl = ''
-	}
+	const fillFormData = data => {
+		formData.categoryId = data.category_id || ''
+		formData.title = data.title || ''
+		formData.description = data.fault_description || ''
+		formData.addressId = data.address_id || data.address_data?.id || ''
+		formData.budgetAmount = data.budget_amount === null || data.budget_amount === undefined ? '' : String(data.budget_amount)
+		formData.invoiceType = data.invoice_type === '' || data.invoice_type === null || data.invoice_type === undefined ? '' : Number(data.invoice_type)
 
-	const handleUploadAttachment = () => {
-		if (uploading.value) {
-			return
+		const selectedAddress = {
+			id: data.address_id || data.address_data?.id,
+			province: data.address_data?.province || data.province || '',
+			city: data.address_data?.city || data.city || '',
+			district: data.address_data?.district || data.district || '',
+			address: data.address_data?.address || data.address || ''
 		}
 
-		uni.chooseImage({
-			count: 1,
-			sizeType: ['compressed'],
-			success: async (res) => {
-				const filePath = res.tempFilePaths?.[0]
-				if (!filePath) {
-					return
-				}
-
-				uploading.value = true
-
-				try {
-					const response = await uploadCommonFile(filePath)
-					if (response.code !== 1 || !response.data?.fullurl) {
-						uni.showToast({
-							title: response.msg || '上传失败',
-							icon: 'none'
-						})
-						return
-					}
-
-					attachment.filePath = filePath
-					attachment.url = response.data.url || ''
-					attachment.fullurl = response.data.fullurl || ''
-					uni.showToast({
-						title: response.msg || '上传成功',
-						icon: 'success'
-					})
-				} catch (error) {
-					uni.showToast({
-						title: error?.msg || '上传失败',
-						icon: 'none'
-					})
-				} finally {
-					uploading.value = false
-				}
+		if (selectedAddress.id) {
+			const exists = addressOptions.value.find(item => String(item.id) === String(selectedAddress.id))
+			if (!exists) {
+				addressOptions.value = [selectedAddress, ...addressOptions.value]
 			}
-		})
+		}
+
+		setDateTimePickerByTimestamp(data.planned_start_time || data.planned_time)
 	}
 
-	const commitOrder = async () => {
-		if (navigating.value) {
+	const fetchOrderDetail = async id => {
+		loading.value = true
+
+		try {
+			const res = await getUserOrderDetail({ id })
+
+			if (res.code !== 1) {
+				uni.showToast({ title: res.msg || '订单详情获取失败', icon: 'none' })
+				return
+			}
+
+			fillFormData(res.data || {})
+		} catch (error) {
+			uni.showToast({ title: '订单详情获取失败', icon: 'none' })
+		} finally {
+			loading.value = false
+		}
+	}
+
+	const handleSubmit = async () => {
+		if (submitting.value || loading.value) {
 			return
 		}
 
@@ -427,8 +346,7 @@
 			return
 		}
 
-		const plannedStartTime = formData.plannedStartTimestamp
-		if (!plannedStartTime) {
+		if (!formData.plannedStartTimestamp) {
 			uni.showToast({ title: '请选择计划开始时间', icon: 'none' })
 			return
 		}
@@ -438,71 +356,54 @@
 			return
 		}
 
-		if (!formData.plannedHours) {
-			uni.showToast({ title: '请输入工时', icon: 'none' })
-			return
-		}
-
-		if (!attachment.filePath) {
-			uni.showToast({ title: '请上传附件图片', icon: 'none' })
-			return
-		}
-
 		if (formData.invoiceType === '') {
 			uni.showToast({ title: '请选择发票需求', icon: 'none' })
 			return
 		}
 
-		if (!agreed.value) {
-			uni.showToast({ title: '请先勾选协议', icon: 'none' })
-			return
-		}
-
-		navigating.value = true
+		submitting.value = true
 
 		try {
-			const res = await createDemand({
+			const res = await updateDemand({
+				id: Number(orderId.value),
 				category_id: Number(formData.categoryId),
 				title: formData.title.trim(),
 				fault_description: formData.description.trim(),
 				address_id: Number(formData.addressId),
-				planned_start_time: plannedStartTime,
+				planned_start_time: formData.plannedStartTimestamp,
 				budget_amount: Number(formData.budgetAmount),
-				planned_time: Number(formData.plannedHours),
 				invoice_type: Number(formData.invoiceType)
-			}, attachment.filePath)
+			})
 
 			if (res.code !== 1) {
-				navigating.value = false
-				uni.showToast({ title: res.msg || '发单失败', icon: 'none' })
+				uni.showToast({ title: res.msg || '修改订单失败', icon: 'none' })
 				return
 			}
 
-			const createdOrderId = res.data?.id || res.data?.order_id || res.id || (typeof res.data === 'number' || typeof res.data === 'string' ? res.data : '')
-			if (!createdOrderId) {
-				navigating.value = false
-				uni.showToast({ title: '创建成功但缺少订单ID', icon: 'none' })
-				return
-			}
-
-			uni.redirectTo({
-				url: `/pages/user/order/sendOrderSuccess?id=${createdOrderId}`,
-				complete: () => {
-					setTimeout(() => {
-						navigating.value = false
-					}, 300)
-				}
-			})
+			uni.showToast({ title: res.msg || '修改成功', icon: 'success' })
+			setTimeout(() => {
+				uni.navigateBack()
+			}, 500)
 		} catch (error) {
-			uni.showToast({ title: error?.msg || '发单失败', icon: 'none' })
-			navigating.value = false
+			uni.showToast({ title: '修改订单失败', icon: 'none' })
+		} finally {
+			submitting.value = false
 		}
 	}
 
-	onMounted(() => {
-		initDateTimePicker()
-		fetchCategoryList()
-		fetchDefaultAddress()
+	onLoad(options => {
+		orderId.value = options?.id || ''
+	})
+
+	onMounted(async () => {
+		setDateTimePickerByTimestamp(0)
+		await fetchCategoryList()
+		if (!orderId.value) {
+			uni.showToast({ title: '缺少订单ID', icon: 'none' })
+			return
+		}
+
+		fetchOrderDetail(orderId.value)
 	})
 </script>
 
@@ -516,67 +417,6 @@
 		padding-bottom: 140rpx;
 	}
 
-
-
-	.header-row1 {
-		width: 100%;
-		text-align: center;
-	}
-
-	/* 移除gap，用margin-right实现圆点间距 */
-	.hearder-point {
-		width: 8rpx;
-		height: 8rpx;
-		background-color: #ffffff;
-		border-radius: 50%;
-		margin-right: 10rpx;
-	}
-
-	/* 最后一个圆点清除右边距 */
-	.hearder-point.last-point {
-		margin-right: 0;
-	}
-
-	.hearder-point-container {
-		display: flex;
-		justify-content: center;
-		align-items: center;
-	}
-
-	.headerright {
-		position: absolute;
-		right: 30rpx;
-		top: 60rpx;
-		width: 68rpx;
-		height: 68rpx;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background-color: #deac44;
-		border: 2rpx solid #e7c67f;
-		border-radius: 50%;
-	}
-
-	.page-title {
-		margin-top: 40rpx;
-		font-size: 38rpx;
-		font-weight: 600;
-		display: block;
-		margin-bottom: 8rpx;
-		color: #ffffff;
-	}
-
-	.greeting {
-		font-weight: 700;
-		font-size: 40rpx;
-		color: #fff;
-		margin-top: 40rpx;
-		margin-bottom: 40rpx;
-		align-self: flex-start;
-	}
-
-
-	/* 表单通用项 */
 	.form-box {
 		margin: 0 30rpx;
 	}
@@ -610,11 +450,6 @@
 		color: #111;
 	}
 
-	.picker-arrow {
-		font-size: 28rpx;
-		color: #98a2b3;
-	}
-
 	.input {
 		width: 100%;
 		height: 52rpx;
@@ -639,12 +474,6 @@
 		color: #98a2b3;
 	}
 
-	.arrow-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
 	.label {
 		font-size: 26rpx;
 		color: #888;
@@ -660,164 +489,13 @@
 		margin-right: 24rpx;
 	}
 
-	.value {
-		font-size: 32rpx;
-		color: #111;
+	.arrow-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
 	}
 
 	.text-right {
 		text-align: right;
-	}
-
-	.row-right {
-		display: flex;
-		align-items: center;
-	}
-
-	.row-right .value {
-		margin-right: 12rpx;
-	}
-
-	/* 上传附件区域 */
-	.upload-wrap {
-		box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.15);
-		margin-bottom: 24rpx;
-		background-color: #fff;
-		border-radius: 20rpx;
-		padding: 30rpx;
-	}
-
-	.upload-title {
-		font-size: 36rpx;
-		color: #111;
-		font-weight: 500;
-		display: block;
-		margin-bottom: 20rpx;
-	}
-
-	.upload-box {
-		width: 100%;
-		height: 460rpx;
-		border: 2rpx dashed #94c0ff;
-		background: #fff;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 24rpx;
-		position: relative;
-		overflow: hidden;
-	}
-
-	.upload-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 16rpx;
-	}
-
-	.upload-text {
-		font-size: 36rpx;
-		color: #007aff;
-	}
-
-	.upload-tips {
-		font-size: 24rpx;
-		color: #98a2b3;
-	}
-
-	.upload-preview {
-		width: 100%;
-		height: 100%;
-	}
-
-	.upload-mask {
-		position: absolute;
-		left: 0;
-		top: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.35);
-		color: #fff;
-		font-size: 28rpx;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.upload-link {
-		display: block;
-		margin-top: 20rpx;
-		font-size: 22rpx;
-		line-height: 34rpx;
-		color: #667085;
-		word-break: break-all;
-	}
-
-	.upload-action {
-		display: inline-block;
-		margin-top: 16rpx;
-		font-size: 26rpx;
-		color: #007aff;
-	}
-
-	/* 协议勾选 */
-	.agree-row {
-		display: flex;
-		align-items: center;
-		margin-top: 40rpx;
-		margin-bottom: 40rpx;
-		justify-content: center;
-		gap: 12rpx;
-	}
-
-	.agree-text {
-		font-size: 28rpx;
-		color: #444;
-	}
-
-	/* 提交按钮 */
-	.submit-btn {
-		text-align: center;
-		padding: 30rpx 30rpx;
-		background: #007aff;
-		color: #fff;
-		font-size: 34rpx;
-		border-radius: 60rpx;
-		border: none;
-	}
-
-	.submit-btn::after {
-		border: none;
-	}
-
-	/* 底部Tab */
-	.tab-bar {
-		position: fixed;
-		left: 0;
-		bottom: 0;
-		width: 750rpx;
-		height: 120rpx;
-		background: #fff;
-		display: flex;
-		border-top: 1rpx solid #eee;
-	}
-
-	.tab-item {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.tab-text {
-		font-size: 26rpx;
-		color: #999;
-		margin-top: 8rpx;
-	}
-
-	.tab-text.active {
-		color: #007aff;
 	}
 </style>
