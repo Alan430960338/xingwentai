@@ -12,20 +12,21 @@
 		<!-- 平台规则卡片 -->
 		<view class="rule-card">
 			<text class="rule-title">平台服务规则</text>
-			<text class="rule-txt">查看</text>
+			<text class="rule-txt">{{ walletInfo.rules || '暂无规则说明' }}</text>
 		</view>
 
 		<!-- 账单明细区域 -->
 		<view class="bill-card">
 			<text class="card-title">账单明细</text>
 			<!-- 月份下拉选择框 -->
-			<view class="month-select">
+		<!-- 	<view class="month-select">
 				<text class="month-text">{{ currentMonth }}</text>
 				<uni-icons type="arrowdown" size="28" color="#666" />
-			</view>
+			</view> -->
 
 			<!-- 账单列表 -->
 			<view class="bill-list">
+				<view v-if="billData.length === 0" class="empty-bill">暂无账单明细</view>
 				<view class="bill-item" v-for="(item, idx) in billData" :key="idx">
 					<view class="bill-left">
 						<text class="bill-name">{{ item.name }}</text>
@@ -33,7 +34,7 @@
 					</view>
 					<view class="bill-right">
 						<text class="bill-amount" :class="item.type">{{ item.amount }}</text>
-						<text class="look-txt">查看</text>
+						<text class="look-txt">余额 {{ item.after }}</text>
 					</view>
 				</view>
 			</view>
@@ -48,56 +49,105 @@
 	import bar from '@/components/tabBer/engineer.vue'
 	import mybtn from '@/components/button/btmBtn.vue'
 	import {
+		computed,
 		ref
 	} from 'vue'
-	// 顶部统计数据
-	const statData = ref([{
-			money: '¥6,820',
+	import { onShow } from '@dcloudio/uni-app'
+	import { getWalletDetail, getWalletInfo } from '@/api/engineer.js'
+
+	const walletInfo = ref({
+		money: '0.00',
+		to_be_settled: 0,
+		settled: 0,
+		rules: ''
+	})
+
+	const statData = computed(() => ([
+		{
+			money: `¥${formatMoney(walletInfo.value.money)}`,
 			label: '可提现'
 		},
 		{
-			money: '¥1,680',
+			money: `¥${formatMoney(walletInfo.value.to_be_settled)}`,
 			label: '待结算'
 		},
 		{
-			money: '¥22,400',
+			money: `¥${formatMoney(walletInfo.value.settled)}`,
 			label: '累计收入'
-		},
-	])
+		}
+	]))
+
 	// 当前选择月份
 	const currentMonth = ref('2026年6月')
-	// 账单明细模拟数据
-	const billData = ref([{
-			name: '机房精密空调维修',
-			desc: '订单收益·已结算·06-18 16:40',
-			amount: '+ ¥1,680',
-			type: 'income'
-		},
-		{
-			name: '监控设备调试',
-			desc: '订单收益·已结算·06-17 14:12',
-			amount: '+ ¥860',
-			type: 'income'
-		},
-		{
-			name: '办公楼巡检',
-			desc: '订单收益·待结算·06-16 18:25',
-			amount: '+ ¥520',
-			type: 'income'
-		},
-		{
-			name: '提现到微信零钱',
-			desc: '提现明细·处理中·06-15 09:30',
-			amount: '- ¥2,000',
-			type: 'out'
-		},
-		{
-			name: '提现手续费',
-			desc: '提现明细·已扣除·06-15 09:30',
-			amount: '- ¥2',
-			type: 'out'
-		},
-	])
+	const billData = ref([])
+
+	const formatMoney = value => {
+		if (value === null || value === undefined || value === '') {
+			return '0.00'
+		}
+
+		return Number(value).toFixed(2)
+	}
+
+	const formatTime = timestamp => {
+		if (!timestamp) {
+			return '--'
+		}
+
+		const normalizedTimestamp = timestamp.toString().length === 13 ? Number(timestamp) : Number(timestamp) * 1000
+		const date = new Date(normalizedTimestamp)
+		if (Number.isNaN(date.getTime())) {
+			return '--'
+		}
+
+		const padZero = value => String(value).padStart(2, '0')
+		return `${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`
+	}
+
+	const fetchWalletInfo = async () => {
+		try {
+			const res = await getWalletInfo()
+			if (res.code !== 1) {
+				uni.showToast({ title: res.msg || '钱包信息获取失败', icon: 'none' })
+				return
+			}
+
+			walletInfo.value = {
+				money: res.data?.money ?? '0.00',
+				to_be_settled: res.data?.to_be_settled ?? 0,
+				settled: res.data?.settled ?? 0,
+				rules: res.data?.rules || ''
+			}
+		} catch (error) {
+			uni.showToast({ title: '钱包信息获取失败', icon: 'none' })
+		}
+	}
+
+	const fetchWalletDetail = async () => {
+		try {
+			const res = await getWalletDetail({ page: 1, limit: 15 })
+			if (res.code !== 1) {
+				uni.showToast({ title: res.msg || '账单明细获取失败', icon: 'none' })
+				return
+			}
+
+			const list = Array.isArray(res.data?.data) ? res.data.data : []
+			billData.value = list.map(item => {
+				const amountValue = Number(item.money || 0)
+				const isIncome = amountValue >= 0
+				return {
+					id: item.id,
+					name: item.memo || '钱包变动',
+					desc: `账单明细·${formatTime(item.createtime)}`,
+					amount: `${isIncome ? '+' : '-'} ¥${formatMoney(Math.abs(amountValue))}`,
+					type: isIncome ? 'income' : 'out',
+					after: `¥${formatMoney(item.after)}`
+				}
+			})
+		} catch (error) {
+			uni.showToast({ title: '账单明细获取失败', icon: 'none' })
+		}
+	}
 	
 	
 	const gotoWallet = ()=>{
@@ -105,6 +155,11 @@
 			url: '/pages/engineer/wallet/withDrawal'
 		})
 	}
+
+	onShow(() => {
+		fetchWalletInfo()
+		fetchWalletDetail()
+	})
 	
 </script>
 
@@ -227,6 +282,13 @@
 		border-bottom: none;
 		margin-bottom: 0;
 		padding-bottom: 0;
+	}
+
+	.empty-bill {
+		text-align: center;
+		font-size: 26rpx;
+		color: #98a2b3;
+		padding: 30rpx 0;
 	}
 
 	.bill-left {

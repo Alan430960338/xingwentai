@@ -2,7 +2,7 @@
 	<view class="page-wrap">
 		<AppHeader title="订单详情" content="工单详情" :back="true" ></AppHeader>
 		<!-- 顶部进度提示框 -->
-		<view class="top-tip">
+		<view class="top-tip" v-if="progressTip!=''">
 			<text class="tip-text">{{ progressTip }}</text>
 		</view>
 
@@ -28,7 +28,7 @@
 
 			<view class="order-info-row">
 				<text class="info-label">服务时间</text>
-				<text class="info-value info-value-right">{{ formatTime(detailData.planned_time || detailData.planned_start_time) }}</text>
+				<text class="info-value info-value-right">{{ formatTime(detailData.planned_start_time) }}</text>
 			</view>
 
 			<view class="order-info-row">
@@ -194,8 +194,7 @@
 				title: '已发布',
 				desc: formatTime(detailData.value.createtime),
 				active: true
-			},
-			...items
+			}
 		]
 	})
 

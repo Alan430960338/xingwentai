@@ -5,16 +5,16 @@
 
 
 		<!-- 用户信息卡片 -->
-		<view class="user-card"  @click="gotoCompany">
+		<view class="user-card" @click="gotoCompany">
 			<view class="user-avatar">
-				<text class="avatar-text">文</text>
+				<text class="avatar-text">{{ avatarText }}</text>
 			</view>
 			<view class="user-info">
 				<view class="name-row">
-					<text class="user-name">新文泰运维服务商</text>
-					<uni-icons type="checkmarkempty" size="20" color="#007aff" />
+					<text class="user-name">{{ displayName }}</text>
+					<uni-icons v-if="hasEnterpriseAuth" type="checkmarkempty" size="20" color="#007aff" />
 				</view>
-				<text class="auth-tip">服务商公司 · 认证通过</text>
+				<text class="auth-tip">{{ authTip }}</text>
 			</view>
 		</view>
 
@@ -30,15 +30,15 @@
 
 		<!-- 功能菜单列表 -->
 		<view class="menu-card">
-			<view class="menu-item">
+			<view class="menu-item" @click="gotoCompanyInfo">
 				<view class="menu-icon blue">
 					<uni-icons type="list" size="30" color="#007aff" />
 				</view>
 				<view class="menu-text">
-					<text class="menu-title">公司角色</text>
-					<text class="menu-desc">可管理订单和工程师</text>
+					<text class="menu-title">企业资料</text>
+					<text class="menu-desc">管理企业认证与基础资料</text>
 				</view>
-				<text class="menu-right">管理员</text>
+				<text class="menu-right">{{ hasEnterpriseAuth ? '已认证' : '去完善' }}</text>
 			</view>
 			<view class="divider"></view>
 
@@ -78,6 +78,30 @@
 				<text class="menu-right">已绑定</text>
 			</view>
 			<view class="divider"></view>
+
+			<view class="menu-item" @click="gotoFpInfo">
+				<view class="menu-icon green">
+					<uni-icons type="paper" size="30" color="#34c759" />
+				</view>
+				<view class="menu-text">
+					<text class="menu-title">发票信息</text>
+					<text class="menu-desc">管理发票抬头和开票信息</text>
+				</view>
+				<text class="menu-right">已设置</text>
+			</view>
+			<view class="divider"></view>
+
+			<view class="menu-item" @click="gotoInvoiceManagemrnt">
+				<view class="menu-icon pale-blue">
+					<uni-icons type="document" size="30" color="#82aaff" />
+				</view>
+				<view class="menu-text">
+					<text class="menu-title">发票管理</text>
+					<text class="menu-desc">查看开票进度和历史发票</text>
+				</view>
+				<text class="menu-right">查看</text>
+			</view>
+			<view class="divider"></view>
 			<view class="menu-item" @click="gotoServiceCenter">
 				<view class="menu-icon pale-blue">
 					<uni-icons type="email" size="30" color="#82aaff" />
@@ -99,10 +123,64 @@
 
 <script setup>
 	import {
+		computed,
 		ref
 	} from 'vue';
 	import bar from '@/components/tabBer/service.vue'
 	import AppHeader from '@/components/header.vue'
+	import { getEnterpriseAuthDetail } from '@/api/user.js'
+	import { onShow } from '@dcloudio/uni-app'
+
+	const userInfo = ref({})
+	const enterpriseAuthDetail = ref(null)
+
+	onShow(async () => {
+		userInfo.value = uni.getStorageSync('userinfo')
+		await fetchEnterpriseAuthDetail()
+	})
+
+	const hasEnterpriseAuth = computed(() => {
+		if (!enterpriseAuthDetail.value) {
+			return false
+		}
+
+		return Object.keys(enterpriseAuthDetail.value).length > 0
+	})
+
+	const displayName = computed(() => {
+		const detail = enterpriseAuthDetail.value || {}
+		return detail.enterprise_name || detail.company_name || detail.name || userInfo.value.nickname || userInfo.value.username || '未设置名称'
+	})
+
+	const authTip = computed(() => {
+		return hasEnterpriseAuth.value ? '服务商公司 · 认证通过' : '服务商公司 · 未认证'
+	})
+
+	const avatarText = computed(() => {
+		const name = displayName.value || ''
+		return name.slice(0, 1) || '我'
+	})
+
+	const fetchEnterpriseAuthDetail = async () => {
+		try {
+			const res = await getEnterpriseAuthDetail()
+			if (res.code !== 1) {
+				enterpriseAuthDetail.value = null
+				return
+			}
+
+			const detail = res.data
+			if (!detail || (typeof detail === 'object' && Object.keys(detail).length === 0)) {
+				enterpriseAuthDetail.value = null
+				return
+			}
+
+			enterpriseAuthDetail.value = detail
+		} catch (error) {
+			enterpriseAuthDetail.value = null
+		}
+	}
+
 	const gotoInvoiceManagemrnt = () => {
 		uni.navigateTo({
 			url: '/pages/user/order/invoceManagement'
@@ -133,6 +211,18 @@
 	const uploadCase = () => {
 		uni.navigateTo({
 			url: '/pages/engineer/order/serviceCase'
+		})
+	}
+
+	const gotoFpInfo = () => {
+		uni.navigateTo({
+			url: '/pages/user/order/invoceManagement'
+		})
+	}
+
+	const gotoCompanyInfo = () => {
+		uni.navigateTo({
+			url: '/pages/user/company/comInfo'
 		})
 	}
 

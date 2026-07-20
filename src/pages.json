@@ -103,6 +103,13 @@
 		}
 	},
 	{
+		"path": "pages/user/order/evaluate",
+		"style": {
+			"navigationBarTitleText": "评价订单",
+			"navigationStyle": "custom"
+		}
+	},
+	{
 		"path": "pages/user/company/comInfo",
 		"style": {
 			"navigationBarTitleText": "企业资料",
@@ -183,6 +190,13 @@
 		"path": "pages/engineer/order/settlement",
 		"style": {
 			"navigationBarTitleText": "发起结算",
+			"navigationStyle": "custom"
+		}
+	},
+	{
+		"path": "pages/engineer/order/evaluateDetail",
+		"style": {
+			"navigationBarTitleText": "查看评价",
 			"navigationStyle": "custom"
 		}
 	},

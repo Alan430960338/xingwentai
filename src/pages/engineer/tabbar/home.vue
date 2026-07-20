@@ -1,7 +1,7 @@
 <template>
 	<view class="page-wrap">
-		<AppHeader title="接单大厅" content="接单大厅12345"  style=""></AppHeader>
-		<!-- 筛选栏 -->
+		<AppHeader title="接单大厅" content="接单大厅"></AppHeader>
+
 		<view class="filter-bar">
 			<view class="scroll-wrap">
 				<view class="tag-item" v-for="(item, idx) in filterList" :key="idx" @click="handleFilter(item)">
@@ -11,82 +11,113 @@
 			</view>
 		</view>
 
-		<!-- 工单列表 -->
 		<view class="orderList">
-			<!-- 空状态 -->
-			<view v-if="orderList.length === 0" class="empty-state">
+			<view v-if="orderList.length === 0 && !loading" class="empty-state">
 				<uni-icons type="document" size="80" color="#ccc" />
 				<text class="empty-text">暂无工单</text>
 			</view>
 
-			<!-- 工单卡片列表 -->
-			<view class="order-card" v-for="(order, index) in orderList" :key="order.id" @click="gotoDetail(order)">
+			<view class="order-card" v-for="order in orderList" :key="order.id">
 				<view class="order-title-row">
-					<text class="order-title">{{ order.title }}</text>
+					<text class="order-title">{{ order.title || '未命名工单' }}</text>
 					<view class="order-tag" :style="{ backgroundColor: getStatusColor(order.status).bg }">
 						<text class="tag-text" :style="{ color: getStatusColor(order.status).color }">
-							{{ order.status }}
+							{{ formatStatus(order.status) }}
 						</text>
 					</view>
 				</view>
 
 				<view class="order-title-row-tag">
-					<div class="tag1">
-						SLA <span>{{ order.sla }}</span>小时
-					</div>
-					<div class="tag2">
-						{{ order.type }}
-					</div>
+					<view class="tag1">SLA {{ formatHours(order.hours) }}小时</view>
+					<view class="tag2">{{ order.category_name || '暂无分类' }}</view>
 				</view>
 
 				<view class="order-info-row">
 					<text class="info-label">服务地址</text>
-					<text class="info-value">{{ order.address }}</text>
+					<text class="info-value">{{ formatAddress(order) }}</text>
 				</view>
 
 				<view class="order-info-row">
 					<text class="info-label">服务时间</text>
-					<text class="info-value">{{ order.serviceTime }}</text>
+					<text class="info-value">{{ formatTime(order.planned_start_time) }}</text>
 				</view>
 
 				<view class="order-info-row">
 					<text class="info-label">联系人</text>
-					<text class="info-value">{{ order.contact }}</text>
+					<text class="info-value">{{ formatContact(order.address_data) }}</text>
 				</view>
 
-				<view class="order-info-row">
+				<view class="order-info-row" :class="{ 'no-border': !order.distance_text }">
 					<text class="info-label">服务商</text>
-					<text class="info-value">{{ order.provider }}</text>
+					<text class="info-value">{{ order.service_name || '暂未分配' }}</text>
 				</view>
 
-				<!-- 进度条 -->
-				<div class="line-container">
-					<div class="bottom-line" v-for="i in 4" :key="i" :class="{ active: i <= order.progress }" />
-				</div>
+				<view v-if="order.distance_text" class="order-info-row no-border">
+					<text class="info-label">距离</text>
+					<text class="info-value">{{ order.distance_text || '--' }}</text>
+				</view>
 
-				<!-- 价格和操作按钮 -->
-				<div class="totle-price">
+				<view class="line-container">
+					<view class="bottom-line" v-for="i in 4" :key="i" :class="{ active: i <= getProgressValue(order.status) }" />
+				</view>
+
+				<view class="totle-price">
 					<view>
-						￥<span class="price">{{ order.price }}</span>
+						￥<text class="price">{{ formatMoney(order.budget_amount) }}</text>
 					</view>
 					<view style="display: flex;">
-						<!-- 只保留 点击接单 按钮，固定绿色 #11a968 -->
-						<div class="item-btn accept-btn" @click.stop="openConfirmPopup(order)">
+						<view v-if="order.status === 1" class="item-btn accept-btn" @click.stop="openConfirmPopup(order)">
 							点击接单
-						</div>
+						</view>
 					</view>
-				</div>
+				</view>
 			</view>
+
+			<view v-if="loading" class="list-footer">加载中...</view>
+			<view v-else-if="orderList.length > 0" class="list-footer">{{ hasMore ? '上拉加载更多' : '没有更多了' }}</view>
 		</view>
 
-		<!-- 底部确认弹窗 -->
 		<view class="popup-mask" v-if="showPopup" @click="closePopup">
 			<view class="popup-box" @click.stop>
 				<text class="popup-title">确认接单?</text>
-				<text class="popup-desc">订单金额￥{{ currentOrder.price }}，计划{{ currentOrder.serviceTime }}到场。</text>
+				<text class="popup-desc">订单金额￥{{ formatMoney(currentOrder.budget_amount) }}，计划{{ formatTime(currentOrder.planned_start_time) }}到场。</text>
 				<view class="popup-btn-group">
 					<view class="popup-btn cancel-btn" @click="closePopup">再看看</view>
 					<view class="popup-btn confirm-btn" @click="confirmAccept">确认接单</view>
+				</view>
+			</view>
+		</view>
+
+		<view class="popup-mask" v-if="showFilterPopup" @click="closeFilterPopup">
+			<view class="popup-box filter-popup-box" @click.stop>
+				<text class="popup-title">{{ filterPopupTitle }}</text>
+				<template v-if="filterPopupType === 'budget' || filterPopupType === 'hours'">
+					<view class="range-input-row">
+						<input
+							class="filter-input range-input"
+							:type="filterPopupType === 'budget' ? 'digit' : 'number'"
+							v-model="filterRange.min"
+							:placeholder="filterPopupType === 'budget' ? '请输入最低预算' : '请输入最短工期'"
+						/>
+						<text class="range-separator">-</text>
+						<input
+							class="filter-input range-input"
+							:type="filterPopupType === 'budget' ? 'digit' : 'number'"
+							v-model="filterRange.max"
+							:placeholder="filterPopupType === 'budget' ? '请输入最高预算' : '请输入最长工期'"
+						/>
+					</view>
+				</template>
+				<input
+					v-else
+					class="filter-input"
+					type="number"
+					v-model="filterInputValue"
+					:placeholder="filterPopupPlaceholder"
+				/>
+				<view class="popup-btn-group">
+					<view class="popup-btn cancel-btn" @click="closeFilterPopup">取消</view>
+					<view class="popup-btn confirm-btn" @click="confirmFilterInput">确定</view>
 				</view>
 			</view>
 		</view>
@@ -96,143 +127,367 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
+import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/header.vue'
 import bar from '@/components/tabBer/engineer.vue'
+import { acceptOrder, getCenterOrderList } from '@/api/engineer.js'
+import { getDemandCategoryList } from '@/api/user.js'
 
-// ============ 模拟数据 ============
-// 筛选标签
 const filterList = ref([
 	{ label: '距离', key: 'distance' },
-	{ label: '项目类型', key: 'type' },
+	{ label: '项目类型', key: 'category' },
 	{ label: '预算', key: 'budget' },
-	{ label: '工期', key: 'duration' }
+	{ label: '工期', key: 'hours' }
 ])
 
-// 工单列表数据
-const orderList = ref([
-	{
-		id: 1,
-		title: '机房精密空调告警维修',
-		status: '待派单',
-		sla: 4,
-		type: '机房空调',
-		address: '杭州市滨江区江南大道 88 号数康中心',
-		serviceTime: '06-18 09:30',
-		contact: '王经理 138****5521',
-		provider: '杭州维保服务有限公司',
-		price: '1,680',
-		progress: 1 // 1-4 表示进度
-	},
-	{
-		id: 2,
-		title: '服务器硬件故障排查',
-		status: '待派单',
-		sla: 2,
-		type: '服务器',
-		address: '杭州市西湖区文三路 100 号高新大厦 5F',
-		serviceTime: '06-18 14:00',
-		contact: '李工 139****2234',
-		provider: '杭州迅维科技',
-		price: '3,200.00',
-		progress: 3
-	},
-	{
-		id: 3,
-		title: '网络设备巡检维护',
-		status: '待派单',
-		sla: 8,
-		type: '网络设备',
-		address: '杭州市余杭区未来科技城 66 号',
-		serviceTime: '06-17 10:00',
-		contact: '张主管 137****8899',
-		provider: '杭州网安服务有限公司',
-		price: '1,500.00',
-		progress: 4
-	},
-	{
-		id: 4,
-		title: 'UPS电源更换',
-		status: '待派单',
-		sla: 6,
-		type: '电源设备',
-		address: '杭州市萧山区建设一路 168 号',
-		serviceTime: '06-16 09:00',
-		contact: '陈工 135****6677',
-		provider: '杭州电力服务',
-		price: '5,200.00',
-		progress: 0
-	}
-])
-
-// 弹窗控制
+const orderList = ref([])
+const loading = ref(false)
+const page = ref(1)
+const limit = 10
+const hasMore = ref(true)
+const categoryOptions = ref([])
+const filterParams = ref({
+	category_id: '',
+	budget_amount: '',
+	hours: '',
+	distance: '',
+	lat: '',
+	lng: ''
+})
 const showPopup = ref(false)
 const currentOrder = ref({})
+const accepting = ref(false)
+const showFilterPopup = ref(false)
+const filterPopupType = ref('')
+const filterInputValue = ref('')
+const filterRange = ref({
+	min: '',
+	max: ''
+})
 
-// ============ 方法 ============
+const statusMap = {
+	1: '待接单',
+	2: '待开始',
+	3: '进行中',
+	4: '已取消',
+	5: '已完成',
+	6: '超时'
+}
 
-// 获取状态颜色
+const formatStatus = (status) => {
+	return statusMap[status] || `状态${status ?? '--'}`
+}
+
 const getStatusColor = (status) => {
 	const colorMap = {
-		'待派单': { bg: '#e6f9ef', color: '#11a968' },
 		'待接单': { bg: '#fff7e6', color: '#ff7d00' },
+		'待开始': { bg: '#e8f3ff', color: '#007aff' },
 		'进行中': { bg: '#e8f3ff', color: '#007aff' },
 		'已完成': { bg: '#e6f9ef', color: '#039855' },
 		'已取消': { bg: '#f5f5f5', color: '#999' },
-		'已超时': { bg: '#ffe8e6', color: '#ff3b30' }
+		'超时': { bg: '#ffe8e6', color: '#ff3b30' }
 	}
-	return colorMap[status] || { bg: '#f5f5f5', color: '#999' }
+	return colorMap[formatStatus(status)] || { bg: '#f5f5f5', color: '#999' }
 }
 
-// 筛选
-const handleFilter = (item) => {
-	uni.showToast({
-		title: `筛选: ${item.label}`,
-		icon: 'none'
+const getProgressValue = (status) => {
+	const progressMap = {
+		1: 1,
+		2: 2,
+		3: 3,
+		4: 1,
+		5: 4,
+		6: 3
+	}
+	return progressMap[status] || 1
+}
+
+const padZero = value => String(value).padStart(2, '0')
+
+const formatTime = timestamp => {
+	if (!timestamp) {
+		return '--'
+	}
+
+	const normalizedTimestamp = timestamp.toString().length === 13 ? Number(timestamp) : Number(timestamp) * 1000
+	const date = new Date(normalizedTimestamp)
+	if (Number.isNaN(date.getTime())) {
+		return '--'
+	}
+
+	return `${date.getFullYear()}-${padZero(date.getMonth() + 1)}-${padZero(date.getDate())} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`
+}
+
+const formatHours = hours => {
+	if (hours === null || hours === undefined || hours === '') {
+		return '--'
+	}
+
+	return hours
+}
+
+const formatMoney = amount => {
+	if (amount === null || amount === undefined || amount === '') {
+		return '--'
+	}
+
+	return Number(amount).toFixed(2)
+}
+
+const formatAddress = order => {
+	const parts = [order.address_data?.province, order.address_data?.city, order.address_data?.district, order.address].filter(Boolean)
+	return parts.join(' ') || '--'
+}
+
+const formatContact = addressData => {
+	if (!addressData?.contact_name && !addressData?.contact_phone) {
+		return '--'
+	}
+
+	return [addressData.contact_name, addressData.contact_phone].filter(Boolean).join(' ')
+}
+
+const filterPopupTitleMap = {
+	budget: '输入预算',
+	hours: '输入工期'
+}
+
+const filterPopupPlaceholderMap = {
+	budget: '请输入预算金额',
+	hours: '请输入工期小时数'
+}
+
+const filterPopupTitle = computed(() => filterPopupTitleMap[filterPopupType.value] || '输入筛选值')
+const filterPopupPlaceholder = computed(() => filterPopupPlaceholderMap[filterPopupType.value] || '请输入')
+
+const updateCurrentLocation = async () => {
+	try {
+		const location = await new Promise((resolve, reject) => {
+			uni.getLocation({
+				type: 'gcj02',
+				success: resolve,
+				fail: reject
+			})
+		})
+
+		filterParams.value.lat = location.latitude ? String(location.latitude) : ''
+		filterParams.value.lng = location.longitude ? String(location.longitude) : ''
+	} catch (error) {
+		filterParams.value.lat = ''
+		filterParams.value.lng = ''
+	}
+}
+
+const fetchCategoryList = async () => {
+	if (categoryOptions.value.length > 0) {
+		return
+	}
+
+	try {
+		const res = await getDemandCategoryList({ type: 'type' })
+		if (res.code !== 1) {
+			return
+		}
+
+		categoryOptions.value = Array.isArray(res.data) ? res.data : []
+	} catch (error) {
+		// 静默处理筛选项加载失败
+	}
+}
+
+const fetchOrderList = async (reset = false) => {
+	if (loading.value) {
+		return
+	}
+
+	if (reset) {
+		page.value = 1
+		hasMore.value = true
+	}
+
+	if (!hasMore.value) {
+		return
+	}
+
+	loading.value = true
+
+	try {
+		const res = await getCenterOrderList({
+			page: page.value,
+			limit,
+			...filterParams.value
+		})
+
+		if (res.code !== 1) {
+			uni.showToast({ title: res.msg || '工单获取失败', icon: 'none' })
+			return
+		}
+
+		const listData = Array.isArray(res.data?.data) ? res.data.data.map(item => ({
+			...item,
+			status: item.status === '' || item.status === null || item.status === undefined ? item.status : Number(item.status),
+			address_data: item.address_data || {}
+		})) : []
+
+		orderList.value = reset ? listData : [...orderList.value, ...listData]
+		hasMore.value = page.value < Number(res.data?.last_page || 0)
+
+		if (hasMore.value) {
+			page.value += 1
+		}
+	} catch (error) {
+		uni.showToast({ title: '工单获取失败', icon: 'none' })
+	} finally {
+		loading.value = false
+	}
+}
+
+const handleFilter = async (item) => {
+	if (item.key === 'category') {
+		await fetchCategoryList()
+		if (categoryOptions.value.length === 0) {
+			uni.showToast({ title: '暂无项目类型', icon: 'none' })
+			return
+		}
+
+		uni.showActionSheet({
+			itemList: ['全部', ...categoryOptions.value.map(option => option.name)],
+			success: res => {
+				filterParams.value.category_id = res.tapIndex === 0 ? '' : categoryOptions.value[res.tapIndex - 1]?.id || ''
+				fetchOrderList(true)
+			}
+		})
+		return
+	}
+
+	if (item.key === 'budget') {
+		openFilterPopup('budget', filterParams.value.budget_amount)
+		return
+	}
+
+	if (item.key === 'hours') {
+		openFilterPopup('hours', filterParams.value.hours)
+		return
+	}
+
+	const distanceOptions = [
+		{ label: '全部', value: '' },
+		{ label: '由近到远', value: 1 },
+		{ label: '由远到近', value: 2 }
+	]
+	uni.showActionSheet({
+		itemList: distanceOptions.map(option => option.label),
+		success: res => {
+			filterParams.value.distance = distanceOptions[res.tapIndex]?.value || ''
+			fetchOrderList(true)
+		}
 	})
-	// TODO: 实现筛选逻辑
 }
 
-// 跳转详情
-const gotoDetail = (order) => {
-	uni.navigateTo({
-		url: `/pages/user/order/orderDetail?id=${order.id}`
-	})
-}
-
-// 打开接单确认弹窗
 const openConfirmPopup = (order) => {
 	currentOrder.value = order
 	showPopup.value = true
 }
 
-// 关闭弹窗
+const openFilterPopup = (type, value) => {
+	filterPopupType.value = type
+	if (type === 'budget' || type === 'hours') {
+		const [min = '', max = ''] = value ? String(value).split('-') : []
+		filterRange.value = { min, max }
+		filterInputValue.value = ''
+	} else {
+		filterInputValue.value = value ? String(value) : ''
+	}
+	showFilterPopup.value = true
+}
+
 const closePopup = () => {
 	showPopup.value = false
 	currentOrder.value = {}
 }
 
-// 确认接单
-const confirmAccept = () => {
-	// 模拟接单成功
-	currentOrder.value.status = '进行中'
-	closePopup()
-	uni.showToast({
-		title: '接单成功',
-		icon: 'success'
-	})
+const closeFilterPopup = () => {
+	showFilterPopup.value = false
+	filterPopupType.value = ''
+	filterInputValue.value = ''
+	filterRange.value = {
+		min: '',
+		max: ''
+	}
 }
 
-// ============ 生命周期 ============
-onMounted(() => {
-	// 模拟加载数据
-	console.log('工单列表加载完成，共', orderList.value.length, '条')
+const confirmFilterInput = () => {
+	if (filterPopupType.value === 'budget') {
+		const minValue = filterRange.value.min.trim()
+		const maxValue = filterRange.value.max.trim()
+
+		if (!minValue && !maxValue) {
+			filterParams.value.budget_amount = ''
+		} else if (!minValue || !maxValue) {
+			uni.showToast({ title: '请输入完整预算区间', icon: 'none' })
+			return
+		} else {
+			filterParams.value.budget_amount = `${minValue}-${maxValue}`
+		}
+	}
+
+	if (filterPopupType.value === 'hours') {
+		const minValue = filterRange.value.min.trim()
+		const maxValue = filterRange.value.max.trim()
+
+		if (!minValue && !maxValue) {
+			filterParams.value.hours = ''
+		} else if (!minValue || !maxValue) {
+			uni.showToast({ title: '请输入完整工期区间', icon: 'none' })
+			return
+		} else {
+			filterParams.value.hours = `${minValue}-${maxValue}`
+		}
+	}
+
+	closeFilterPopup()
+	fetchOrderList(true)
+}
+
+const confirmAccept = async () => {
+	if (accepting.value || !currentOrder.value?.id) {
+		return
+	}
+
+	accepting.value = true
+
+	try {
+		const res = await acceptOrder({ id: currentOrder.value.id })
+		if (res.code !== 1) {
+			uni.showToast({ title: res.msg || '接单失败', icon: 'none' })
+			return
+		}
+
+		closePopup()
+		uni.showToast({
+			title: '接单成功',
+			icon: 'success'
+		})
+		fetchOrderList(true)
+	} catch (error) {
+		uni.showToast({ title: '接单失败', icon: 'none' })
+	} finally {
+		accepting.value = false
+	}
+}
+
+onShow(async () => {
+	await updateCurrentLocation()
+	fetchOrderList(true)
+})
+
+onReachBottom(() => {
+	fetchOrderList()
 })
 </script>
 
 <style scoped>
-
-
 .page-wrap {
 	min-height: 100vh;
 	width: 750rpx;
@@ -241,7 +496,6 @@ onMounted(() => {
 	background-color: #f0f7ff;
 }
 
-/* ===== 筛选栏 ===== */
 .filter-bar {
 	margin: 0 30rpx;
 	box-sizing: border-box;
@@ -275,7 +529,6 @@ onMounted(() => {
 	margin-right: 12rpx;
 }
 
-/* ===== 工单卡片 ===== */
 .order-card {
 	background-color: #ffffff;
 	border-radius: 24rpx;
@@ -334,7 +587,6 @@ onMounted(() => {
 
 .order-tag .tag-text {
 	font-size: 20rpx;
-	color: #ff7d00;
 }
 
 .order-info-row {
@@ -343,6 +595,11 @@ onMounted(() => {
 	padding-bottom: 15rpx;
 	display: flex;
 	justify-content: space-between;
+}
+
+.order-info-row.no-border {
+	border-bottom: none;
+	padding-bottom: 0;
 }
 
 .info-label {
@@ -358,9 +615,9 @@ onMounted(() => {
 	color: #1d2939;
 	line-height: 32rpx;
 	text-align: right;
+	margin-left: 20rpx;
 }
 
-/* ===== 进度条 ===== */
 .line-container {
 	display: flex;
 	justify-content: space-between;
@@ -378,7 +635,6 @@ onMounted(() => {
 	background: linear-gradient(to right, #166ae7, #12b4ca);
 }
 
-/* ===== 价格和按钮 ===== */
 .totle-price {
 	align-items: center;
 	justify-content: space-between;
@@ -402,20 +658,13 @@ onMounted(() => {
 	color: #007aff;
 	background: #fff;
 }
-/* 接单按钮覆盖样式 绿色 #11a968 */
+
 .item-btn.accept-btn {
 	background: #11a968;
 	color: #fff;
 	border: none;
 }
 
-.primary-btn {
-	background: #007aff;
-	color: #fff;
-	border: none;
-}
-
-/* ===== 空状态 ===== */
 .empty-state {
 	margin: 0 30rpx;
 	display: flex;
@@ -428,60 +677,112 @@ onMounted(() => {
 .empty-text {
 	font-size: 32rpx;
 	color: #999;
-	margin-top: 30rpx;
+	margin-top: 20rpx;
 }
 
-/* ========== 底部弹窗样式（新增，不改动原有页面样式） ========== */
+.list-footer {
+	text-align: center;
+	font-size: 24rpx;
+	color: #98a2b3;
+	padding: 10rpx 0 20rpx;
+}
+
 .popup-mask {
 	position: fixed;
 	left: 0;
 	top: 0;
-	width: 750rpx;
-	height: 100vh;
-	background: rgba(0,0,0,0.4);
-	z-index: 999;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.45);
 	display: flex;
-	align-items: flex-end;
+	justify-content: center;
+	align-items: center;
+	z-index: 999;
 }
+
 .popup-box {
-	width: 750rpx;
+	width: 580rpx;
 	background: #fff;
-	border-radius: 32rpx 32rpx 0 0;
-	padding: 60rpx 40rpx;
+	border-radius: 24rpx;
+	padding: 40rpx 30rpx 30rpx;
 	box-sizing: border-box;
 }
+
+.filter-popup-box {
+	padding-top: 36rpx;
+}
+
+.filter-input {
+	height: 84rpx;
+	border: 1rpx solid #d0d5dd;
+	border-radius: 18rpx;
+	padding: 0 24rpx;
+	font-size: 28rpx;
+	color: #1d2939;
+	background: #f8fafc;
+	margin-bottom: 28rpx;
+}
+
+.range-input-row {
+	display: flex;
+	align-items: center;
+	margin-bottom: 28rpx;
+}
+
+.range-input {
+	flex: 1;
+	margin-bottom: 0;
+}
+
+.range-separator {
+	font-size: 32rpx;
+	color: #667085;
+	margin: 0 20rpx;
+	flex-shrink: 0;
+}
+
 .popup-title {
-	font-size: 42rpx;
-	color: #111;
+	font-size: 34rpx;
 	font-weight: 600;
+	color: #1d2939;
+	text-align: center;
 	display: block;
-	margin-bottom: 20rpx;
+	margin-bottom: 18rpx;
 }
+
 .popup-desc {
-	font-size: 30rpx;
-	color: #666;
+	font-size: 26rpx;
+	line-height: 40rpx;
+	color: #667085;
+	text-align: center;
 	display: block;
-	margin-bottom: 30rpx;
+	margin-bottom: 32rpx;
 }
+
 .popup-btn-group {
 	display: flex;
 	justify-content: space-between;
 }
+
 .popup-btn {
-	width: 280rpx;
-	padding: 10rpx 20rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border-radius: 20rpx;
-	font-size: 30rpx;
+	flex: 1;
+	height: 84rpx;
+	line-height: 84rpx;
+	text-align: center;
+	border-radius: 42rpx;
+	font-size: 28rpx;
 }
-.cancel-btn {
-	border: 2rpx solid #cce0ff;
-	color: #007aff;
+
+.popup-btn.cancel-btn {
+	margin-right: 20rpx;
+	background: #f5f7fa;
+	color: #667085;
+	border: none;
 }
-.confirm-btn {
-	background: #11a968;
+
+.popup-btn.confirm-btn {
+	background: linear-gradient(90deg, #11a968, #0f9a60);
 	color: #fff;
+	border: none;
 }
 </style>

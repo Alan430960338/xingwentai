@@ -1,20 +1,20 @@
 <template>
 	<view class="page-wrap">
-		<AppHeader title="我的" content="企业账户"></AppHeader>
+		<AppHeader title="我的" :content="userIdentityTitle"></AppHeader>
 
 
 
 		<!-- 用户信息卡片 -->
-		<view class="user-card">
+		<view class="user-card" >
 			<view class="user-avatar">
-				<text class="avatar-text">文</text>
+				<image v-if="avatarUrl" class="avatar-image" :src="avatarUrl" mode="aspectFill" />
+				<text v-else class="avatar-text">{{ avatarText }}</text>
 			</view>
 			<view class="user-info">
 				<view class="name-row">
-					<text class="user-name">杭州文泰科技园</text>
-					<uni-icons type="checkmarkempty" size="20" color="#007aff" />
+					<text class="user-name">{{ displayName }}</text>
 				</view>
-				<text class="auth-tip">企业认证已通过</text>
+				<text class="auth-tip">{{ authTip }}</text>
 			</view>
 		</view>
 
@@ -57,18 +57,6 @@
 
 		<!-- 功能菜单列表 -->
 		<view class="menu-card">
-			<view class="menu-item" @click="gotoCompanyInfo">
-				<view class="menu-icon blue">
-					<uni-icons type="list" size="30" color="#007aff" />
-				</view>
-				<view class="menu-text">
-					<text class="menu-title">企业资料</text>
-					<text class="menu-desc">完善企业相关资料</text>
-				</view>
-				<text class="menu-right">已完善</text>
-			</view>
-			<view class="divider"></view>
-
 			<view class="menu-item" @click="gotoAddress">
 				<view class="menu-icon orange">
 					<uni-icons type="location" size="30" color="#ff9500" />
@@ -81,7 +69,7 @@
 			</view>
 			<view class="divider"></view>
 
-			<view class="menu-item">
+		<!-- 	<view class="menu-item" @click="gotoFpInfo">
 				<view class="menu-icon green">
 					<uni-icons type="paper" size="30" color="#34c759" />
 				</view>
@@ -90,7 +78,7 @@
 					<text class="menu-desc">管理发票抬头和开票信息</text>
 				</view>
 				<text class="menu-right">已设置</text>
-			</view>
+			</view> -->
 			<view class="divider"></view>
 
 			<view class="menu-item" @click="gotoInvoiceManagemrnt">
@@ -134,10 +122,55 @@
 
 <script setup>
 	import {
+		computed,
 		ref
 	} from 'vue';
+	import { baseUrl } from '@/api/config/config.js'
+	import { getUserInfo } from '@/api/user.js'
 	import bar from '@/components/tabBer/index.vue'
 	import AppHeader from '@/components/header.vue'
+	import {
+		onShow
+	} from '@dcloudio/uni-app';
+
+	const userInfo = ref({})
+	const profileInfo = ref({})
+
+	onShow(async () => {
+		userInfo.value = uni.getStorageSync('userinfo')
+		await fetchUserInfo()
+	})
+
+	const userIdentityTitle = computed(() => '个人账户')
+	const displayName = computed(() => profileInfo.value?.nickname || userInfo.value?.nickname || userInfo.value?.username || '未设置名称')
+	const authTip = computed(() => '普通用户账户')
+	const avatarText = computed(() => (displayName.value || '').slice(0, 1) || '我')
+	const avatarUrl = computed(() => {
+		const avatar = profileInfo.value?.avatar
+		if (!avatar) {
+			return ''
+		}
+
+		if (/^https?:\/\//.test(avatar)) {
+			return avatar
+		}
+
+		const apiOrigin = baseUrl.replace(/\/api\/?$/, '')
+		return `${apiOrigin}${avatar}`
+	})
+
+	const fetchUserInfo = async () => {
+		try {
+			const res = await getUserInfo()
+			if (res.code !== 1) {
+				return
+			}
+
+			profileInfo.value = res.data || {}
+		} catch (error) {
+			profileInfo.value = {}
+		}
+	}
 
 
 	//本地缓存信息示例:
@@ -151,27 +184,26 @@
 	// 		"mobile": "13000000000",
 	// 		"avatar": "/assets/img/avatar.png",
 	// 		"score": 0,
-	// 		"token": "f38a2739-620d-40e7-ba05-6b58df7dce83",
+	// 		"token": "880fe9bd-51f8-42fb-a818-f4ee8816d124",
 	// 		"user_id": 1,
-	// 		"createtime": 1784510757,
-	// 		"expiretime": 1787102757,
+	// 		"createtime": 1784518820,
+	// 		"expiretime": 1787110820,
 	// 		"expires_in": 2592000
 	// 	}
 	// }
+	const gotoAddress = () => {
+		uni.navigateTo({
+			url: '/pages/user/address/address'
+		})
+	}
 	const gotoInvoiceManagemrnt = () => {
 		uni.navigateTo({
 			url: '/pages/user/order/invoceManagement'
 		})
 	}
-
-	const gotoCompanyInfo = () => {
+	const gotoFpInfo = () => {
 		uni.navigateTo({
-			url: '/pages/user/company/comInfo'
-		})
-	}
-	const gotoAddress = () => {
-		uni.navigateTo({
-			url: '/pages/user/address/address'
+			url: '/pages/user/order/invoceManagement'
 		})
 	}
 	const gotoServiceCenter = () => {
@@ -266,6 +298,12 @@
 		align-items: center;
 		justify-content: center;
 		margin-right: 32rpx;
+		overflow: hidden;
+	}
+
+	.avatar-image {
+		width: 100%;
+		height: 100%;
 	}
 
 	.avatar-text {

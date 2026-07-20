@@ -5,6 +5,10 @@ export const login = (data) => {
   return request.post("user/test_login", data);
 };
 
+export const getUserInfo = (data) => {
+  return request.get("user/user_info", data);
+};
+
 export const getUserOrderList = (data) => {
   return request.get("demands/userOrderList", data);
 };
@@ -104,3 +108,25 @@ export const createDemand = (data, filePath, name = "images") => {
 export const updateDemand = (data) => {
   return request.post("demands/update", data);
 };
+
+export const getEnterpriseAuthDetail = (data) => {
+  return request.get("worker/enterprise_auth_detail", data);
+};
+
+export const submitEnterpriseAuth = (data) => {
+  return request.post("worker/enterprise_auth", data);
+};
+
+export const editEnterpriseAuth = (data) => {
+  return request.post("worker/enterprise_auth_edit", data);
+};
+
+
+export const confirmComplete = (data) => {
+  return request.post("demands/confirm_complete", data);
+};
+
+export const evaluate = (data) => {
+  return request.post("demands/evaluate", data);
+};
+

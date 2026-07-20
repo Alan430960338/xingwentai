@@ -9,7 +9,7 @@
 		<!-- 登录方式卡片 -->
 		<view class="login-card">
 			<!-- 微信登录 -->
-			<view class="login-item" @click="wxLogin">
+			<view class="login-item">
 				<view class="icon-box green">
 					<uni-icons type="person" size="40" color="#fff" />
 				</view>
@@ -22,7 +22,7 @@
 			<view class="divider" />
 
 			<!-- 手机号登录 -->
-			<view class="login-item" @click="gotoEngineer">
+			<view class="login-item">
 				<view class="icon-box blue">
 					<uni-icons type="phone" size="30" color="#fff" />
 				</view>
@@ -35,7 +35,7 @@
 			<view class="divider" />
 
 			<!-- 员工登录 -->
-			<view class="login-item" @click="gotoService">
+			<view class="login-item">
 				<view class="icon-box orange">
 					<uni-icons type="briefcase" size="30" color="#fff" />
 				</view>
@@ -57,7 +57,7 @@
 		</view>
 
 		<!-- 登录按钮 -->
-		<button class="login-btn">
+		<button class="login-btn" @click="handleLoginButton">
 			登录
 		</button>
 
@@ -72,6 +72,13 @@
 	} from 'vue'
 	import { login } from '@/api/user.js'
 
+
+
+	// 1:普通用户，2：服务商，3：工程师
+	const TEST_LOGIN_ID = 3
+	
+	
+	
 	let agree = ref(false)
 
 	async function handleLogin(id) {
@@ -88,17 +95,23 @@
 					duration: 1500
 				})
 				setTimeout(() => {
-					if (id === 1) {
-						uni.navigateTo({
+					if (userinfo.group_id === 1) {
+						uni.reLaunch({
 							url: '/pages/user/tabbar/index',
 						})
-					} else if (id === 2) {
-						uni.navigateTo({
+					} else if (userinfo.group_id === 3) {
+						uni.reLaunch({
+							url: '/pages/serviceProvider/tabbar/workbench',
+						})
+					} else if (userinfo.group_id === 2) {
+						uni.reLaunch({
 							url: '/pages/engineer/tabbar/home',
 						})
-					} else if (id === 3) {
-						uni.navigateTo({
-							url: '/pages/serviceProvider/tabbar/workbench',
+					} else {
+						uni.showToast({
+							title: '未知账户类型',
+							icon: 'none',
+							duration: 1500
 						})
 					}
 				}, 1500)
@@ -118,16 +131,17 @@
 		}
 	}
 
-	function wxLogin() {
-		handleLogin(1)
-	}
+	function handleLoginButton() {
+		if (!agree.value) {
+			uni.showToast({
+				title: '请先同意用户协议和隐私政策',
+				icon: 'none',
+				duration: 1500
+			})
+			return
+		}
 
-	function gotoEngineer() {
-		handleLogin(2)
-	}
-
-	function gotoService() {
-		handleLogin(3)
+		handleLogin(TEST_LOGIN_ID)
 	}
 
 	function change() {
