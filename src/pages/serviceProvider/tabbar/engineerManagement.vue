@@ -14,7 +14,7 @@
 			<!-- 搜索框 -->
 			<view class="search-input">
 				<uni-icons type="search" size="20" color="#999" />
-				<input class="search-placeholder" placeholder="搜索故障内容、机房地址、师傅" v-model="searchKeyword"
+				<input class="search-placeholder" placeholder="搜索昵称或手机号" v-model="searchKeyword"
 					@input="handleSearch" />
 			</view>
 
@@ -28,15 +28,18 @@
 			
 			
 			<view class="engineer-list">
-			      <view class="engineer-card" v-for="(item, idx) in engineerData" :key="idx">
-			        <text class="name">{{ item.name }}</text>
+				<view v-if="engineerData.length === 0 && !loading" class="empty-state">暂无工程师</view>
+			      <view class="engineer-card" v-for="(item, idx) in engineerData" :key="item.id || idx">
+			        <text class="name">{{ item.nickname || '--' }}</text>
 			        <view class="info-row">
-			          <text class="info-text">工种: {{ item.workType }} / 接单数 {{ item.orderNum }} 单</text>
-			          <view class="status-tag" :class="item.tagClass">
-			            <text class="tag-text">{{ item.status }}</text>
+			          <text class="info-text">工种: {{ item.technician?.job_name || '未填写' }} / 接单数 {{ item.order_count || 0 }} 单</text>
+			          <view class="status-tag" :class="item.is_post === 1 ? 'tag-service' : 'tag-free'">
+			            <text class="tag-text">{{ item.is_post === 1 ? '已发布' : '未发布' }}</text>
 			          </view>
 			        </view>
 			      </view>
+				<view v-if="loading" class="list-footer">加载中...</view>
+				<view v-else-if="engineerData.length > 0" class="list-footer">{{ hasMore ? '上拉加载更多' : '没有更多了' }}</view>
 			    </view>
 			
 			<bar tabname="engineer"></bar>
@@ -56,22 +59,33 @@
 		ref,
 		computed
 	} from 'vue'
+	import { onReachBottom, onShow } from '@dcloudio/uni-app'
+	import { getEngineerList } from '@/api/engineer.js'
+
+	const searchKeyword = ref('')
 	const currentTab = ref('all')
+	const page = ref(1)
+	const limit = 10
+	const hasMore = ref(true)
+	const loading = ref(false)
+	const engineerData = ref([])
+
 	// 切换标签
 	const switchTab = (key) => {
 		currentTab.value = key
+		fetchEngineerList(true)
 	}
 	const statData = ref([{
-			money: '6人',
-			label: '在线工程师'
+			money: '0',
+			label: '当前列表'
 		},
 		{
-			money: '2人',
-			label: '待派工'
+			money: '0',
+			label: '已发布'
 		},
 		{
-			money: '3.6',
-			label: '平均评分'
+			money: '0',
+			label: '已接单'
 		},
 	])
 
@@ -81,35 +95,101 @@
 			key: 'all'
 		},
 		{
-			label: '在岗',
-			key: '待接单'
+			label: '已发布',
+			key: 'published'
 		},
 		{
-			label: '空闲',
-			key: '进行中'
+			label: '已接单',
+			key: 'working'
 		},
 		{
-			label: '离岗',
-			key: '已超时'
+			label: '未接单',
+			key: 'idle'
 		}
 	]
-	
-	const engineerData = ref([
-	  {
-	    name: '李建国',
-	    workType: '空调维修',
-	    orderNum: 86,
-	    status: '服务中',
-	    tagClass: 'tag-service'
-	  },
-	  {
-	    name: '陈海峰',
-	    workType: '机房巡检',
-	    orderNum: 52,
-	    status: '可派工',
-	    tagClass: 'tag-free'
-	  }
-	])
+
+	const refreshStats = list => {
+		statData.value = [{
+			money: String(list.length),
+			label: '当前列表'
+		},
+		{
+			money: String(list.filter(item => Number(item.is_post) === 1).length),
+			label: '已发布'
+		},
+		{
+			money: String(list.filter(item => Number(item.order_count) > 0).length),
+			label: '已接单'
+		}]
+	}
+
+	const fetchEngineerList = async (reset = false) => {
+		if (loading.value) {
+			return
+		}
+
+		if (reset) {
+			page.value = 1
+			hasMore.value = true
+		}
+
+		if (!hasMore.value) {
+			return
+		}
+
+		loading.value = true
+
+		try {
+			const requestData = {
+				page: page.value,
+				limit,
+				keyword: searchKeyword.value.trim()
+			}
+
+			if (currentTab.value === 'published') {
+				requestData.is_post = 1
+			}
+
+			if (currentTab.value === 'working') {
+				requestData.order_count = 1
+			}
+
+			if (currentTab.value === 'idle') {
+				requestData.order_count = 0
+			}
+
+			const res = await getEngineerList(requestData)
+			if (res.code !== 1) {
+				uni.showToast({ title: res.msg || '工程师获取失败', icon: 'none' })
+				return
+			}
+
+			const listData = Array.isArray(res.data?.data) ? res.data.data : []
+			engineerData.value = reset ? listData : [...engineerData.value, ...listData]
+			refreshStats(engineerData.value)
+			hasMore.value = page.value < Number(res.data?.last_page || 0)
+
+			if (hasMore.value) {
+				page.value += 1
+			}
+		} catch (error) {
+			uni.showToast({ title: '工程师获取失败', icon: 'none' })
+		} finally {
+			loading.value = false
+		}
+	}
+
+	const handleSearch = () => {
+		fetchEngineerList(true)
+	}
+
+	onShow(() => {
+		fetchEngineerList(true)
+	})
+
+	onReachBottom(() => {
+		fetchEngineerList()
+	})
 </script>
 
 <style scoped>
@@ -204,6 +284,13 @@
 	
 	.engineer-list {
 		margin: 0 30rpx;
+	}
+	.empty-state,
+	.list-footer {
+		text-align: center;
+		font-size: 26rpx;
+		color: #98a2b3;
+		padding: 30rpx 0;
 	}
 	.engineer-card {
 	  background: #fff;

@@ -105,3 +105,7 @@ export const editServiceCase = (data) => {
 export const deleteServiceCase = (data) => {
   return request.post("saces/del", data);
 };
+
+export const getEngineerList = (data) => {
+  return request.get("engineer/list", data);
+};

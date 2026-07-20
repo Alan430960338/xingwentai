@@ -4,6 +4,8 @@
     <!-- 可选技能标签 -->
     <view class="all-card">
       <text class="label">选择标签</text>
+      <view v-if="loading" class="status-text">加载中...</view>
+      <view v-else-if="allTagList.length === 0" class="status-text">暂无技能标签</view>
       <view class="all-tag-row">
         <view 
           class="tag-item" 
@@ -18,54 +20,68 @@
     </view>
 
     <!-- 保存按钮 -->
-    <mybtn text="保存" type="primary" style="position: absolute; bottom: 30rpx;left: 30rpx;right: 30rpx;"></mybtn>
+    <mybtn text="保存" type="primary" style="position: absolute; bottom: 30rpx;left: 30rpx;right: 30rpx;" @click="handleSave"></mybtn>
   </view>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import mybtn from '@/components/button/btmBtn.vue'
 import AppHeader from '@/components/header.vue'
-// 全部可选标签数据
-const allTagList = ref([
-  { name: '摄像头安装' },
-  { name: '录像机调试' },
-  { name: '弱电施工' },
-  { name: '设备巡检' },
-  { name: '监控安装' },
-  { name: '网络布线' },
-  { name: '门禁调试' },
-])
+import { getDemandCategoryList } from '@/api/user.js'
+
+const loading = ref(false)
+const allTagList = ref([])
 
 // 已选中标签
-const selectedList = ref([
-  { name: '监控安装' },
-  { name: '网络布线' },
-  { name: '门禁调试' },
-])
+const selectedList = ref([])
+
+const fetchSkillTags = async () => {
+  if (loading.value) {
+    return
+  }
+
+  loading.value = true
+
+  try {
+    const res = await getDemandCategoryList({ type: 'skill' })
+    if (res.code !== 1) {
+      uni.showToast({ title: res.msg || '标签获取失败', icon: 'none' })
+      return
+    }
+
+    allTagList.value = Array.isArray(res.data) ? res.data : []
+  } catch (error) {
+    uni.showToast({ title: '标签获取失败', icon: 'none' })
+  } finally {
+    loading.value = false
+  }
+}
 
 // 判断是否选中
 const isSelected = (tag) => {
-  return selectedList.value.some(item => item.name === tag.name)
+  return selectedList.value.some(item => item.id === tag.id)
 }
 
 // 选中/取消切换
 const toggleSelect = (tag) => {
-  const index = selectedList.value.findIndex(item => item.name === tag.name)
+  const index = selectedList.value.findIndex(item => item.id === tag.id)
   if (index > -1) {
-    // 已存在则取消
     selectedList.value.splice(index, 1)
   } else {
-    // 不存在则添加
     selectedList.value.push(tag)
   }
 }
 
 // 保存
 const handleSave = () => {
-  console.log('已选择标签：', selectedList.value)
   uni.showToast({ title: '保存成功', icon: 'success' })
 }
+
+onShow(() => {
+  fetchSkillTags()
+})
 </script>
 
 <style scoped>
@@ -92,6 +108,13 @@ const handleSave = () => {
   display: block;
   margin-bottom: 30rpx;
 }
+
+.status-text {
+  font-size: 26rpx;
+  color: #98a2b3;
+  margin-bottom: 24rpx;
+}
+
 .all-tag-row {
   display: flex;
   flex-wrap: wrap;

@@ -75,7 +75,7 @@
 
 
 	// 1:普通用户，2：服务商，3：工程师
-	const TEST_LOGIN_ID = 3
+	const TEST_LOGIN_ID = 2
 	
 	
 	
